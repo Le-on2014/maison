@@ -27,6 +27,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,10 +48,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Docker Hub (optionnel) : l'iHost ne sait lire que Docker Hub, pas GHCR.
+      # Secrets a creer dans le depot GitHub : DOCKERHUB_USERNAME et DOCKERHUB_TOKEN (jeton d'acces Read/Write).
+      - name: Login Docker Hub
+        if: ${{ env.DH_USER != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       # GHCR exige un nom en minuscules : Le-on2014 -> ghcr.io/le-on2014/maison
-      - name: Nom de l'image
+      - name: Noms de l'image
         id: img
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/maison" >> "$GITHUB_OUTPUT"
+        run: |
+          ghcr="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/maison"
+          echo "name=$ghcr" >> "$GITHUB_OUTPUT"
+          tags="$ghcr:latest"$'\n'"$ghcr:sha-${GITHUB_SHA}"
+          if [ -n "$DH_USER" ]; then
+            dh="docker.io/${DH_USER,,}/maison"
+            tags="$tags"$'\n'"$dh:latest"$'\n'"$dh:sha-${GITHUB_SHA}"
+            echo "dockerhub=$dh" >> "$GITHUB_OUTPUT"
+          fi
+          { echo "tags<<EOF"; echo "$tags"; echo "EOF"; } >> "$GITHUB_OUTPUT"
 
       - name: Build & push
         uses: docker/build-push-action@v6
@@ -60,13 +80,11 @@ jobs:
           # provenance/sbom desactives : evite les manifestes "unknown/unknown" que certains Docker embarques digerent mal
           provenance: false
           sbom: false
-          tags: |
-            ${{ steps.img.outputs.name }}:latest
-            ${{ steps.img.outputs.name }}:sha-${{ github.sha }}
+          tags: ${{ steps.img.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Resume
         run: |
-          echo "Image : ${{ steps.img.outputs.name }}:latest" >> "$GITHUB_STEP_SUMMARY"
-          echo "Pense a rendre le paquet PUBLIC (Packages -> maison -> Package settings -> Change visibility)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Image GHCR : ${{ steps.img.outputs.name }}:latest" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ steps.img.outputs.dockerhub }}" ]; then echo "Image Docker Hub : ${{ steps.img.outputs.dockerhub }}:latest (a utiliser dans l'iHost)" >> "$GITHUB_STEP_SUMMARY"; else echo "Docker Hub non configure (secrets DOCKERHUB_USERNAME / DOCKERHUB_TOKEN absents)." >> "$GITHUB_STEP_SUMMARY"; fi

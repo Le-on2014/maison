@@ -412,6 +412,14 @@ const routes = {
         catch (e) { return { hue: [], hueError: 'hors de portée', alexa: alexaState() }; }
     },
     'GET /api/deauville': async () => dv.state(),
+    // Cle PSK de la Sony (Deauville) modifiable depuis le reseau, sans recreer le conteneur
+    'POST /api/deauville/psk': async b => {
+        const psk = String(b.psk || '').trim();
+        if (!psk || psk.length > 64) throw Object.assign(new Error('cle vide ou trop longue'), { status: 400 });
+        const c = config.readJson('deauville-config.json', {});
+        config.writeJson('deauville-config.json', { ...c, sonyPsk: psk });
+        return { ok: true };
+    },
     'POST /api/deauville/bulb': async b => { dv.bulbCommand(b); return { queued: true }; },
     'POST /api/tv/remote': async b => { await dv.remote(b.key === 'sony' ? null : tvByKey(b.key), String(b.button), samsungPowerToggle); return {}; },
     'GET /api/tv/remote-info': async q => dv.remoteInfo(q.key === 'sony' ? null : tvByKey(q.key)),

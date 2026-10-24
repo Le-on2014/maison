@@ -2,13 +2,19 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Maison</title>
 <link rel="icon" type="image/png" sizes="256x256" href="/icon-256.png?v=2">
 <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2">
-<link rel="apple-touch-icon" href="/icon-256.png?v=2">
+<link rel="apple-touch-icon" sizes="256x256" href="/icon-256.png?v=2">
 <link rel="manifest" href="/manifest.webmanifest?v=2">
 <meta name="theme-color" content="#0e1015">
+<!-- iPhone : « Sur l'écran d'accueil » ouvre la page en plein écran (sans barre Safari) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Maison">
+<meta name="format-detection" content="telephone=no">
 <style>
   :root {
     --bg: #0e1015; --panel: #171a21; --panel-2: #1f232c; --line: #2a2f3a;
@@ -16,13 +22,21 @@
     --ok: #3ddc97; --warn: #ffb547; --radius: 18px;
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.4 "Segoe UI", system-ui, sans-serif;
+    font: 15px/1.4 "Segoe UI", -apple-system, system-ui, sans-serif;
     background-image: radial-gradient(1200px 600px at 10% -10%, #2a1640 0%, transparent 60%),
                       radial-gradient(900px 500px at 110% 10%, #10233d 0%, transparent 55%);
-    background-attachment: fixed; min-height: 100vh;
+    background-attachment: fixed; min-height: 100vh; min-height: 100dvh;
+    /* iPhone en plein ecran : contenu hors de l'encoche / des bords arrondis */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+    -webkit-tap-highlight-color: transparent;
   }
+  /* iPhone : un champ < 16px declenche un zoom automatique au focus */
+  input[type=text], input[type=number], input[type=tel], input[type=search], select, textarea { font-size: max(16px, 1em); }
+  /* Telecommande / historique ouverts : on fige la page (overflow:hidden ne suffit pas sur iOS) */
+  body.noscroll { position: fixed; left: 0; right: 0; overflow: hidden; }
   header {
     display: flex; align-items: center; justify-content: space-between; gap: 16px;
     padding: 22px 28px 8px; flex-wrap: wrap;
@@ -32,15 +46,15 @@
   .status { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 13px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
   .dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
-  main { padding: 8px 28px 40px; max-width: 1400px; margin: 0 auto; }
+  main { padding: 8px 28px calc(40px + env(safe-area-inset-bottom)); max-width: 1400px; margin: 0 auto; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 600; margin: 26px 0 12px; }
   .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
   .card {
-    background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line);
+    background: rgba(23, 26, 33, .88); background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line);
     border-radius: var(--radius); padding: 18px; position: relative; overflow: hidden;
-    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   }
-  .card.lit { border-color: color-mix(in srgb, var(--glow, var(--accent)) 50%, var(--line)); }
+  .card.lit { border-color: var(--glow, var(--accent)); border-color: color-mix(in srgb, var(--glow, var(--accent)) 50%, var(--line)); }
   .card.lit::before {
     content: ""; position: absolute; inset: -40% -20% auto auto; width: 70%; height: 120%;
     background: radial-gradient(closest-side, var(--glow, var(--accent)), transparent); opacity: .18; pointer-events: none;
@@ -50,9 +64,9 @@
   .sub { color: var(--muted); font-size: 13px; }
   button, .btn {
     background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
-    padding: 8px 14px; font: inherit; cursor: pointer; transition: .15s;
+    padding: 8px 14px; font: inherit; cursor: pointer; transition: .15s; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
-  button:hover { border-color: var(--accent); }
+  @media (hover: hover) { button:hover { border-color: var(--accent); } }
   button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: 0; }
   button.icon { width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 18px; display: grid; place-items: center; }
   button.big { width: 56px; height: 56px; font-size: 22px; }
@@ -66,9 +80,10 @@
   .slider { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
   .slider .val { width: 42px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-  .chip { padding: 6px 12px; border-radius: 999px; font-size: 13px; background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; }
-  .chip:hover, .chip.active { border-color: var(--accent); color: #fff; }
-  .chip.active { background: color-mix(in srgb, var(--accent) 25%, var(--panel-2)); }
+  .chip { padding: 6px 12px; border-radius: 999px; font-size: 13px; background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .chip.active { border-color: var(--accent); color: #fff; }
+  @media (hover: hover) { .chip:hover { border-color: var(--accent); color: #fff; } }
+  .chip.active { background: #4a2a4f; background: color-mix(in srgb, var(--accent) 25%, var(--panel-2)); }
   details { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
   summary { cursor: pointer; color: var(--muted); font-size: 13px; list-style: none; }
   summary::before { content: "▸ "; }
@@ -92,15 +107,21 @@
   .bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .bar input[type=text], .bar select {
     flex: 1; min-width: 160px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
-    border-radius: 12px; padding: 10px 14px; font: inherit;
+    border-radius: 12px; padding: 10px 14px; font: inherit; font-size: max(16px, 1em); min-height: 44px;
   }
+  /* <select> : meme rendu partout (iOS impose sinon son style natif) */
+  .bar select { -webkit-appearance: none; appearance: none; padding-right: 36px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%238b92a3' stroke-width='2'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; }
+  .bar input[type=text]::placeholder { color: var(--muted); }
+  .bar input[type=text]:focus, .bar select:focus, .tcustom input:focus { outline: none; border-color: var(--accent); }
   .mini-vols { display: grid; gap: 8px; margin-top: 8px; }
   .mini-vols .slider { margin-top: 0; }
   .mini-vols .n { width: 120px; flex: none; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .mini-vols .n .tag { display: inline-block; vertical-align: middle; }
   @media (min-width: 900px) { .mini-vols { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 8px 28px; } }
   .bar > input[type=text], .bar > select { max-width: 520px; }
-  .card.warn { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); background: color-mix(in srgb, var(--warn) 8%, var(--panel)); }
+  .card.warn { border-color: #8a6a3a; border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); background: #2a2520; background: color-mix(in srgb, var(--warn) 8%, var(--panel)); }
   .card.warn .title { color: var(--warn); font-size: 16px; }
   .big-ico { font-size: 28px; flex: none; }
   .tv-pow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
@@ -108,7 +129,9 @@
   .tv-vol { display: grid; grid-template-columns: 1fr 44px 1fr 44px 1fr; gap: 8px; margin-top: 10px; align-items: center; }
   .tv-vol button { padding-left: 6px; padding-right: 6px; white-space: nowrap; }
   .tv-vol .icon { justify-self: center; }
-  #toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: #2b1c2f; border: 1px solid var(--accent); padding: 10px 18px; border-radius: 12px; opacity: 0; transition: .25s; pointer-events: none; }
+  /* Toast : au-dessus de tout (telecommande, historique) et au-dessus de la barre d'accueil iPhone */
+  #toast { position: fixed; z-index: 2000; bottom: calc(22px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); text-align: center;
+    background: #2b1c2f; border: 1px solid var(--accent); padding: 10px 18px; border-radius: 12px; opacity: 0; transition: .25s; pointer-events: none; }
   #toast.show { opacity: 1; }
   .tabs { display: flex; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px; }
   .tabs button { border: 0; background: transparent; padding: 8px 16px; border-radius: 10px; }
@@ -134,7 +157,7 @@
   .amb { position: relative; min-height: 104px; border-radius: var(--radius); border: 1px solid rgba(255, 255, 255, .12); padding: 16px;
     text-align: left; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; overflow: hidden;
     background: var(--amb, linear-gradient(135deg, #3a3f4b, #22252d)); box-shadow: 0 6px 18px rgba(0, 0, 0, .35); transition: transform .1s, filter .15s; }
-  .amb:hover { border-color: rgba(255, 255, 255, .35); filter: brightness(1.08); }
+  @media (hover: hover) { .amb:hover { border-color: rgba(255, 255, 255, .35); filter: brightness(1.08); } }
   .amb:active { transform: scale(.97); }
   .amb .e { font-size: 30px; line-height: 1; }
   .amb .n { font-size: 17px; font-weight: 700; text-shadow: 0 1px 6px rgba(0, 0, 0, .4); }
@@ -154,8 +177,8 @@
   .note { color: var(--muted); font-size: 13px; margin-top: 14px; }
   .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; margin-right: 4px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
-  .tag.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+  .tag.warn { color: var(--warn); border-color: #8a6a3a; border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
+  .tag.ok { color: var(--ok); border-color: #2f7a5e; border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
   .chips .swatch { width: 32px; height: 32px; }
   .cfg { color: var(--muted); }
   .grow { flex: 1; min-width: 0; }
@@ -167,14 +190,14 @@
   .xb-big { flex: 1; min-height: 48px; font-size: 16px; font-weight: 600; }
   .card.xbox .controls { flex-wrap: nowrap; }
   /* ---- telecommande ---- */
-  body.noscroll { overflow: hidden; }
-  #remote { position: fixed; inset: 0; z-index: 50; background: rgba(5, 6, 10, .8); backdrop-filter: blur(8px);
-    display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; padding: 16px; }
+  #remote { position: fixed; inset: 0; z-index: 50; background: rgba(5, 6, 10, .8); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
   .remote { width: 100%; max-width: 340px; margin: auto 0; background: linear-gradient(180deg, #252831, #14161b);
     border: 1px solid #343946; border-radius: 44px; padding: 20px 18px 24px;
     box-shadow: 0 30px 80px rgba(0, 0, 0, .65), inset 0 1px 0 rgba(255, 255, 255, .07); }
   .remote .row { margin-bottom: 12px; }
-  .r-msg { background: color-mix(in srgb, var(--warn) 12%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line));
+  .r-msg { background: #3a3024; background: color-mix(in srgb, var(--warn) 12%, var(--panel-2)); border: 1px solid #8a6a3a; border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
     color: #ffe2b0; border-radius: 14px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; white-space: pre-line; }
   .rb { min-height: 56px; border-radius: 16px; font-size: 17px; padding: 6px; touch-action: manipulation; user-select: none; -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent; background: linear-gradient(180deg, #30343f, #23262e); border: 1px solid #3b404d;
@@ -182,7 +205,7 @@
   .rb small { display: block; font-size: 11px; color: var(--muted); }
   .rb:active:not(:disabled), .rb.pressed { transform: translateY(4px) scale(.96); box-shadow: 0 0 0 #0a0b0f, inset 0 3px 8px rgba(0, 0, 0, .55); filter: brightness(1.25); }
   .rb:disabled { opacity: .22; cursor: not-allowed; }
-  .rb:hover:not(:disabled) { border-color: var(--accent); }
+  @media (hover: hover) { .rb:hover:not(:disabled) { border-color: var(--accent); } }
   .rb.power { background: linear-gradient(180deg, #ef4b52, #b3222a); border-color: #ff6f75; font-size: 22px; }
   .r-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
   .r-g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
@@ -204,7 +227,8 @@
   .r-status { text-align: center; margin-top: 14px; min-height: 18px; font-size: 12px; }
   .r-keys { text-align: center; font-size: 11px; color: #5d6474; margin-top: 6px; }
   @media (hover: none) { .r-keys { display: none; } }
-  .r-head { position: sticky; top: -20px; z-index: 2; background: #252831; margin: -20px -18px 4px; padding: 20px 18px 10px; border-radius: 44px 44px 0 0; }
+  .r-head { position: -webkit-sticky; position: sticky; top: -20px; z-index: 2; background: #252831; margin: -20px -18px 4px; padding: 20px 18px 10px; border-radius: 44px 44px 0 0; }
+  .r-head .icon { flex: none; }
   /* ecran large mais peu haut (portable) : telecommande sur 2 colonnes */
   @media (min-width: 700px) and (max-height: 1100px) {
     .remote { max-width: 660px; border-radius: 32px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; align-content: start;
@@ -223,36 +247,38 @@
   .acts { display: flex; align-items: center; gap: 8px; flex: none; }
   .hdr-acts { display: flex; align-items: center; gap: 8px; }
   button.tbtn { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 15px; display: inline-grid; place-items: center; color: var(--muted); }
-  button.tbtn:hover { color: var(--text); }
-  button.tbtn.on { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+  @media (hover: hover) { button.tbtn:hover { color: var(--text); } }
+  button.tbtn.on { color: var(--warn); border-color: #a0783a; border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
   .tbar { position: absolute; left: 0; bottom: 0; height: 3px; background: linear-gradient(90deg, var(--warn), var(--accent)); border-radius: 0 3px 3px 0; transition: width 1s linear; pointer-events: none; }
   .timers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
-  .tchip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; border-radius: 999px; font-size: 13px; background: color-mix(in srgb, var(--warn) 14%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--line)); cursor: default; }
+  .tchip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; border-radius: 999px; font-size: 13px; background: #3b3226; background: color-mix(in srgb, var(--warn) 14%, var(--panel-2)); border: 1px solid #8a6a3a; border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); cursor: default; }
   .tchip .cd { font-variant-numeric: tabular-nums; font-weight: 600; }
   .tchip .x { width: 24px; height: 24px; padding: 0; border-radius: 50%; font-size: 12px; display: grid; place-items: center; border-color: transparent; background: rgba(255, 255, 255, .08); }
-  .tchip .x:hover { border-color: var(--accent); }
-  .modal-bg { position: fixed; inset: 0; z-index: 70; background: rgba(5, 6, 10, .75); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  @media (hover: hover) { .tchip .x:hover { border-color: var(--accent); } }
+  .modal-bg { position: fixed; inset: 0; z-index: 70; background: rgba(5, 6, 10, .75); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .modal { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 20px; box-shadow: 0 30px 80px rgba(0, 0, 0, .6); }
   .modal .title { font-size: 17px; }
   .tpick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
   .tpick button { min-height: 52px; font-size: 16px; font-weight: 600; }
   .tcustom { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
-  .tcustom input { flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font: inherit; }
+  .tcustom input { flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font: inherit; font-size: max(16px, 1em); min-height: 44px; }
   /* ---- historique ---- */
   .side { position: fixed; inset: 0; z-index: 60; }
-  .side-bg { position: absolute; inset: 0; background: rgba(5, 6, 10, .6); backdrop-filter: blur(4px); }
-  .side-panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 100%); background: var(--panel); border-left: 1px solid var(--line); padding: 18px; overflow-y: auto; box-shadow: -20px 0 60px rgba(0, 0, 0, .5); animation: slidein .2s ease-out; }
+  .side-bg { position: absolute; inset: 0; background: rgba(5, 6, 10, .6); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+  .side-panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 100%); background: var(--panel); border-left: 1px solid var(--line);
+    padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) 18px;
+    overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; box-shadow: -20px 0 60px rgba(0, 0, 0, .5); animation: slidein .2s ease-out; }
   @keyframes slidein { from { transform: translateX(40px); opacity: 0; } }
   .h-day { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 600; margin: 18px 0 6px; }
   .h-item { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 4px 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
   .h-item .ico { font-size: 16px; text-align: center; line-height: 1.3; }
   .h-item .txt { overflow-wrap: anywhere; }
   .h-item .meta { grid-column: 2; display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
-  .tag.paris { color: #ffb0ea; border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
-  .tag.deauville { color: #8fd3ff; border-color: color-mix(in srgb, #38bdf8 50%, var(--line)); }
+  .tag.paris { color: #ffb0ea; border-color: #8a3f78; border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  .tag.deauville { color: #8fd3ff; border-color: #2f6f8a; border-color: color-mix(in srgb, #38bdf8 50%, var(--line)); }
   /* ---- favoris ---- */
   .star { cursor: pointer; opacity: .55; font-size: 14px; line-height: 1; margin-left: 6px; user-select: none; -webkit-user-select: none; transition: .15s; }
-  .star:hover { opacity: 1; transform: scale(1.15); }
+  @media (hover: hover) { .star:hover { opacity: 1; transform: scale(1.15); } }
   .star.on { opacity: 1; color: #ffd54a; }
   .amb .star { position: absolute; top: 8px; right: 8px; margin: 0; font-size: 16px; padding: 6px; opacity: .6; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6)); }
   .amb .star.on { opacity: 1; }
@@ -285,8 +311,12 @@
     .controls button:not(.icon) { padding: 8px 11px; }
     .tabs .em { display: none; }
     .bar.hdr { display: contents; }
-    .bar.hdr .status { grid-area: status; gap: 6px; }
-    .bar.hdr .status { font-size: 11px; }
+    /* voyants seuls (sans libelle) : sinon ils chevauchent les onglets Maison / Télé */
+    .bar.hdr .status { grid-area: status; gap: 8px; font-size: 11px; flex: none; justify-self: end; }
+    .bar.hdr .status .lbl { display: none; }
+    .bar.hdr .status > span { display: inline-flex; align-items: center; }
+    .bar.hdr .status .dot { width: 10px; height: 10px; }
+    .tabs { flex: none; }
     #hdrOff .lbl { display: none; }
     .tv-vol button:not(.icon) { font-size: 13px; }
     h2 { margin: 20px 0 10px; }
@@ -295,21 +325,32 @@
   }
   /* Ecran "code d'acces" (iHost : appareils du reseau). Jamais affiche en local. */
   /* iPhone : clavier numerique sans touche Entree -> validation automatique a 6 chiffres, formulaire en haut (pas cache par le clavier) */
-  #pinGate { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: start center; padding: max(48px, env(safe-area-inset-top)) 24px 24px; overflow: auto; -webkit-overflow-scrolling: touch; min-height: -webkit-fill-available;
-  #pinGate input { font-size: 22px; letter-spacing: 8px; text-align: center; width: 180px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
-  #pinGate button { font-size: 18px; padding: 12px 22px; min-height: 48px; }
-  #pinGate form { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  #pinGate { position: fixed; top: 0; left: 0; right: 0; bottom: 0; inset: 0; z-index: 1000; display: grid; place-items: start center; overflow: auto; -webkit-overflow-scrolling: touch;
+    padding: 48px 24px 24px; padding: max(48px, calc(env(safe-area-inset-top) + 24px)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
     background: var(--bg); background-image: radial-gradient(1200px 600px at 10% -10%, #2a1640 0%, transparent 60%), radial-gradient(900px 500px at 110% 10%, #10233d 0%, transparent 55%); }
   #pinGate[hidden] { display: none; }
   .pin-card { width: min(360px, 100%); text-align: center; display: grid; gap: 14px; justify-items: center; }
   .pin-card .logo { width: 72px; height: 72px; border-radius: 20px; }
   .pin-card h1 { font-size: 22px; font-weight: 600; margin: 4px 0 0; }
   .pin-card .sub { margin-top: -8px; }
-  .pin-card form { display: flex; gap: 10px; width: 100%; }
-  .pin-card input { flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
-    padding: 12px 16px; font: inherit; font-size: 24px; letter-spacing: 8px; text-align: center; }
+  .pin-card form { display: flex; gap: 10px; width: 100%; align-items: center; }
+  .pin-card input { flex: 1; min-width: 0; width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 16px; font: inherit; font-size: 24px; letter-spacing: 8px; text-align: center; min-height: 52px; -webkit-appearance: none; appearance: none; }
+  .pin-card input::placeholder { letter-spacing: 4px; color: var(--muted); }
   .pin-card input:focus { outline: none; border-color: var(--accent); }
+  .pin-card button { font-size: 17px; padding: 12px 20px; min-height: 52px; flex: none; }
   .pin-card .err { color: var(--warn); font-size: 13px; min-height: 18px; }
+  /* Ecran tactile : cibles d'au moins 40-44 px */
+  @media (pointer: coarse) {
+    button:not(.tbtn):not(.x):not(.icon):not(.amb):not(.rb) { min-height: 44px; }
+    .chip { display: inline-flex; align-items: center; min-height: 40px; padding: 8px 14px; }
+    button.tbtn, .hdr-acts button { width: 40px; height: 40px; }
+    .tchip .x { width: 30px; height: 30px; font-size: 13px; }
+    .star { padding: 6px; margin-left: 2px; }
+    .light { grid-template-columns: 34px 1fr auto; }
+    .light .swatch, .chips .swatch { width: 34px; height: 34px; }
+    .tabs button { min-height: 40px; }
+  }
 </style>
 </head>
 <body>
@@ -519,22 +560,24 @@
 <script>
 // ---------- code d'acces (iHost : appareils du reseau ; jamais en local) ----------
 (() => {
+  // (script volontairement sans syntaxe recente : vieux Safari, Kindle Silk…)
   const gate = document.getElementById('pinGate');
-  const show = () => { if (gate.hidden) { gate.hidden = false; setTimeout(() => document.getElementById('pinInput').focus(), 50); } };
-  // Un 401 sur /api/* = jeton absent ou expire : on affiche l'ecran "code" sans casser le reste
+  const show = () => { if (gate.hidden) { gate.hidden = false; setTimeout(() => { try { document.getElementById('pinInput').focus(); } catch (e) {} }, 50); } };
+  window.showPinGate = show;
+  // Un 401 (ou 403) sur /api/* = jeton absent ou expire : on affiche l'ecran "code" sans casser le reste
   const realFetch = window.fetch.bind(window);
   window.fetch = async (url, opts) => {
     const r = await realFetch(url, opts);
-    if (r.status === 401 && /^\/api\//.test(String(typeof url === 'string' ? url : url && url.url || ''))) show();
+    const u = String(typeof url === 'string' ? url : (url && url.url) || '');
+    if ((r.status === 401 || r.status === 403) && /^\/api\//.test(u) && u.indexOf('/api/login') !== 0) show();
     return r;
   };
-  realFetch('/api/login-required', { cache: 'no-store' }).then(r => r.json()).then(j => { if (j && j.required) show(); }).catch(() => {});
-  const pinInput = document.getElementById('pinInput');
+  // Verification au chargement, et a nouveau si le flux temps reel decroche (jeton expire pendant la nuit, par ex.)
+  window.checkPinGate = () => realFetch('/api/login-required', { cache: 'no-store' }).then(r => r.json()).then(j => { if (j && j.required) show(); }).catch(() => {});
+  window.checkPinGate();
+  const pinInput = document.getElementById('pinInput'), pinForm = document.getElementById('pinForm');
   let sending = false;
-  // Sur iPhone le pave numerique n'a pas de touche Entree : on valide tout seul a 6 chiffres
-  pinInput.addEventListener('input', () => { pinInput.value = pinInput.value.replace(/\D/g, '').slice(0, 6); if (pinInput.value.length === 6) document.getElementById('pinForm').requestSubmit(); });
-  document.getElementById('pinForm').addEventListener('submit', async ev => {
-    ev.preventDefault();
+  async function submitPin() {
     if (sending) return;
     const input = pinInput, err = document.getElementById('pinErr');
     const pin = input.value.trim();
@@ -551,8 +594,25 @@
       else err.textContent = j.remaining != null ? `Code incorrect (${j.remaining} essai${j.remaining > 1 ? 's' : ''} restant${j.remaining > 1 ? 's' : ''})` : 'Code incorrect';
       input.value = ''; input.focus();
     } catch (e) { sending = false; err.textContent = 'Serveur injoignable'; }
+  }
+  // Sur iPhone le pave numerique n'a pas de touche Entree : on valide tout seul a 6 chiffres
+  // (appel direct : form.requestSubmit() n'existe pas sur les anciens Safari)
+  pinInput.addEventListener('input', () => {
+    const v = pinInput.value.replace(/\D/g, '').slice(0, 6);
+    if (v !== pinInput.value) pinInput.value = v;
+    if (v.length === 6) submitPin();
   });
+  pinForm.addEventListener('submit', ev => { ev.preventDefault(); submitPin(); });
 })();
+
+// Telecommande / historique ouverts : on fige la page derriere (iOS ignore overflow:hidden sur body)
+let lockedY = 0;
+function lockScroll(on) {
+  const b = document.body;
+  if (on === !!b.classList.contains('noscroll')) return;
+  if (on) { lockedY = window.scrollY || 0; b.style.top = -lockedY + 'px'; b.classList.add('noscroll'); }
+  else { b.classList.remove('noscroll'); b.style.top = ''; window.scrollTo(0, lockedY); }
+}
 
 let state = { hue: [], alexa: { ready: false } };
 let busyUntil = 0;              // pas de re-rendu pendant qu'on manipule un curseur
@@ -560,11 +620,12 @@ const markBusy = () => busyUntil = Date.now() + 1500;
 
 // ---------- utilitaires ----------
 const $ = id => document.getElementById(id);
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2500); }
 async function api(path, body) {
   const r = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
   const j = await r.json().catch(() => ({}));
+  if (r.status === 401 || r.status === 403) { if (window.showPinGate) window.showPinGate(); throw new Error('auth'); }   // ecran "code", pas de toast
   if (!r.ok) { toast('Erreur : ' + (j.error || r.status)); throw new Error(j.error); }
   return j;
 }
@@ -660,10 +721,14 @@ let alexaBusyUntil = 0;   // apres un reglage de volume, on n'ecrase pas les cur
 function onVolume(el, serial) {
   if (lastPartout[serial] == null) { const d0 = state.alexa.devices.find(x => x.serial === serial); if (d0 && d0.volume != null) lastPartout[serial] = d0.volume; }
   alexaBusyUntil = Date.now() + 4000; markBusy();
-  el.nextElementSibling.textContent = el.value;
   const d = state.alexa.devices && state.alexa.devices.find(x => x.serial === serial);
   if (d) d.volume = +el.value;
+  showVolume(serial, +el.value);
   sendVolume(serial, +el.value);
+}
+// Le meme appareil a un curseur dans la carte lecteur et un dans "Volume des Alexa" : les deux chiffres suivent tout de suite
+function showVolume(serial, v) {
+  document.querySelectorAll(`input[data-vol="${serial}"]`).forEach(r => { if (+r.value !== v) r.value = v; const s = r.nextElementSibling; if (s && s.classList.contains('val')) s.textContent = v; });
 }
 // Relecture ciblee apres une action : tout de suite, puis ~2,5 s plus tard (dedoublonnee par cle)
 const soonTimers = {};
@@ -735,7 +800,7 @@ function playerCard(d) {
         ${timerBtn({ type: 'alexaStop', device: d.name }, d.name)}
       </div>
       ${d.volume != null ? `<div class="slider"><span>🔊</span>
-        <input type="range" min="0" max="100" value="${d.volume}" oninput="onVolume(this,'${d.serial}')" onchange="sendVolume('${d.serial}',+this.value)">
+        <input type="range" min="0" max="100" value="${d.volume}" data-vol="${d.serial}" oninput="onVolume(this,'${d.serial}')" onchange="sendVolume('${d.serial}',+this.value)">
         <span class="val">${d.volume}</span></div>` : ''}
       ${timerBar({ type: 'alexaStop', device: d.name })}
     </div>`;
@@ -745,7 +810,7 @@ function volRow(d) {
   return `
     <div class="slider ${d.online ? '' : 'offline'}">
       <span class="n">${esc(d.name)}${d.group ? ' <span class="tag">groupe</span>' : ''}${d.online ? '' : ' <span class="tag">hors ligne</span>'}</span>
-      ${d.volume != null ? `<input type="range" min="0" max="100" value="${d.volume}" oninput="onVolume(this,'${d.serial}')" onchange="sendVolume('${d.serial}',+this.value)">
+      ${d.volume != null ? `<input type="range" min="0" max="100" value="${d.volume}" data-vol="${d.serial}" oninput="onVolume(this,'${d.serial}')" onchange="sendVolume('${d.serial}',+this.value)">
       <span class="val">${d.volume}</span>` : '<span class="sub">volume non disponible</span>'}
     </div>`;
 }
@@ -822,8 +887,13 @@ function tvPower(key, on) {
     .then(() => { toast(on ? 'Allumage…' : 'Extinction…'); refreshSoon('tv', loadTvs); })
     .catch(() => { if (t) { t.on = prev; renderTvs(); } });
 }
-function tvVol(key, steps) { toast('Volume télé… (accepte « Autoriser » sur la télé si demandé)'); api('/api/tv/volume', { key, steps }).then(() => toast(`Volume télé ${steps > 0 ? '+' : ''}${steps}`)); }
-function tvMute(key) { api('/api/tv/mute', { key }).then(() => toast('Muet / son')); }
+// Volume / muet tele : retour immediat (la tele n'expose pas son volume, on affiche le pas demande tout de suite)
+function tvVol(key, steps) {
+  const t = tvs.find(x => x.key === key), lbl = `${steps > 0 ? '+' : ''}${steps}`;
+  toast(`🔊 Volume télé ${lbl}` + (t && !t.paired ? ' (accepte « Autoriser » sur la télé si demandé)' : ''));
+  api('/api/tv/volume', { key, steps }).then(() => { toast(`Volume télé ${lbl} ✓`); refreshSoon('tv', loadTvs); });
+}
+function tvMute(key) { toast('🔇 Muet / son'); api('/api/tv/mute', { key }).then(() => { toast('Muet / son ✓'); refreshSoon('tv', loadTvs); }); }
 function tvText(key, alsoSay) {
   const text = $('txt-' + key).value.trim(); if (!text) return;
   toast('Envoi à la télé… (accepte « Autoriser » sur l\'écran si demandé)');
@@ -838,16 +908,40 @@ async function load() {
   try { state = await api('/api/state'); $('dotHue').classList.toggle('on', !state.hueError); render(true); }
   catch (e) { $('dotHue').classList.remove('on'); }
 }
-const es = new EventSource('/api/events');
-es.onmessage = e => { const d = JSON.parse(e.data); if (d.hue) { state.hue = d.hue; if ('hueError' in d) state.hueError = d.hueError; $('dotHue').classList.toggle('on', !state.hueError); if (Date.now() >= busyUntil) renderRooms(); } };
-async function loadAlexa() { if (Date.now() < alexaBusyUntil) return; try { state.alexa = await api('/api/alexa'); if (Date.now() >= busyUntil) renderAlexa(); } catch (e) {} }
+// Temps reel Hue (SSE). iOS coupe la connexion quand Safari passe en arriere-plan : on la rouvre au retour.
+let es = null, esRetry = null;
+function connectEvents() {
+  if (es && es.readyState !== 2) return;   // 2 = CLOSED
+  try { es = new EventSource('/api/events'); } catch (e) { return; }
+  es.onmessage = e => {
+    let d; try { d = JSON.parse(e.data); } catch (err) { return; }
+    if (d && d.hue) { state.hue = d.hue; if ('hueError' in d) state.hueError = d.hueError; $('dotHue').classList.toggle('on', !state.hueError); if (Date.now() >= busyUntil) renderRooms(); }
+  };
+  es.onerror = () => {
+    if (window.checkPinGate) window.checkPinGate();   // flux refuse (jeton expire) -> ecran "code"
+    if (es && es.readyState === 2) { clearTimeout(esRetry); esRetry = setTimeout(connectEvents, 3000); }
+  };
+}
+connectEvents();
+async function loadAlexa() { if (Date.now() < alexaBusyUntil || document.hidden) return; try { state.alexa = await api('/api/alexa'); if (Date.now() >= busyUntil) renderAlexa(); } catch (e) {} }
 setInterval(loadAlexa, 5000);
+// Retour au premier plan (ou page restauree depuis le cache iOS) : on relit tout de suite au lieu d'attendre le prochain cycle
+function resumeAll() {
+  if (document.hidden) return;
+  connectEvents();
+  if (house === 'paris') { load(); if (!$('tab-tv').hidden) loadTvs(); } else loadDeau();
+  loadAlexa(); loadTimers(); loadAmbiances(); loadWeather();
+}
+document.addEventListener('visibilitychange', resumeAll);
+window.addEventListener('pageshow', e => { if (e.persisted) resumeAll(); });
+window.addEventListener('online', resumeAll);
 
 // ---------- requetes "silencieuses" (pas de toast, statut HTTP disponible) ----------
 async function req(path, body) {
   try {
     const r = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
     const data = await r.json().catch(() => ({}));
+    if ((r.status === 401 || r.status === 403) && window.showPinGate) window.showPinGate();
     return { ok: r.ok, status: r.status, data: data || {} };
   } catch (e) { return { ok: false, status: 0, data: { error: 'serveur injoignable' } }; }
 }
@@ -993,7 +1087,7 @@ function renderBulbs(force) {
   if ($('bulbsSummary').textContent !== sumTxt) $('bulbsSummary').textContent = sumTxt;
   setHtml(el, bulbs.map(b => {
     const hex = bulbHex(b), off = b.reachable === false, working = b.busy || b._pending;
-    const bri = Math.round(b.brightness ?? 0) || 1, id = jsArg(b.id), white = bulbWhite(b);
+    const bri = Math.round(b.brightness == null ? 0 : b.brightness) || 1, id = jsArg(b.id), white = bulbWhite(b);
     const status = off ? '<span class="tag warn">hors de portée</span>'
       : (b.on == null ? 'État inconnu' : b.on ? `Allumée · ${bri} %` : 'Éteinte') + (working ? ' · <span class="spin"></span>en cours…' : '');
     const preset = (k, label) => `<span class="chip ${white && b.kelvin && Math.abs(b.kelvin - k) < 200 ? 'active' : ''}" onclick="sendBulb(${id},{kelvin:${k}})">${label}</span>`;
@@ -1033,17 +1127,45 @@ async function sendBulb(id, patch) {
   } else setTimeout(() => loadDeau(), 800);
 }
 
+// Volume / muet de la tele Sony (API audio) : chiffre mis a jour tout de suite, garde 6 s le temps que le serveur relise
+const tvLocal = {};   // key -> { volume, mute, until }
+let tvVolBusy = 0;
+function tvLocalSet(key, patch) { const t = (deau && (deau.tvs || []).find(x => x.key === key)) || {}; const cur = tvLocal[key] && Date.now() < tvLocal[key].until ? tvLocal[key] : { volume: t.volume, mute: t.mute }; tvLocal[key] = { ...cur, ...patch, until: Date.now() + 6000 }; return tvLocal[key]; }
+function tvEff(t) {
+  const l = tvLocal[t.key];
+  if (l && (Date.now() >= l.until || (t.volume === l.volume && !!t.mute === !!l.mute))) delete tvLocal[t.key];
+  return tvLocal[t.key] ? { ...t, volume: tvLocal[t.key].volume, mute: tvLocal[t.key].mute } : t;
+}
+function showTvVolume(key, v, mute) {
+  document.querySelectorAll(`input[data-tvvol="${key}"]`).forEach(r => { if (+r.value !== v) r.value = v; const s = r.nextElementSibling; if (s) s.textContent = mute ? 'muet' : v; const i = r.previousElementSibling; if (i) i.textContent = mute ? '🔇' : '🔊'; });
+}
+const sendTvVolume = throttle((key, v) => req('/api/tv/volume-set', { key, volume: v }).then(r => { if (!r.ok) toast('Volume télé : ' + (r.data.error || r.status)); refreshSoon('deau', loadDeau, [2500]); }), 200);
+function onTvVolume(el, key) { tvVolBusy = Date.now() + 4000; const l = tvLocalSet(key, { volume: +el.value, mute: false }); showTvVolume(key, l.volume, l.mute); sendTvVolume(key, +el.value); }
+function deauMute(key) {
+  const l = tvLocalSet(key, { mute: !(tvLocal[key] && Date.now() < tvLocal[key].until ? tvLocal[key].mute : (deau.tvs.find(x => x.key === key) || {}).mute) });
+  showTvVolume(key, l.volume, l.mute); toast(l.mute ? '🔇 Muet' : '🔊 Son');
+  req('/api/tv/mute', { key }).then(r => { if (!r.ok) { delete tvLocal[key]; toast('Muet : ' + (r.data.error || r.status)); } refreshSoon('deau', loadDeau, [2500]); });
+}
 function renderDeauDevices() {
   const el = $('deauTvs');
   if (!deau) { setHtml(el, cfgCard('Télés et Xbox de Deauville')); return; }
-  const tvCards = (deau.tvs || []).map(t => {
+  if (Date.now() < tvVolBusy) return;   // curseur de volume en cours de reglage
+  const tvCards = (deau.tvs || []).map(t0 => {
+    // valeur optimiste apres un ⏻ recent (tvHold) ou un reglage de volume (tvLocal), sinon celle du serveur
+    const h = tvHold[t0.key];
+    if (h && (Date.now() >= h.until || t0.on === h.on)) delete tvHold[t0.key];
+    const t = tvEff(tvHold[t0.key] ? { ...t0, on: tvHold[t0.key].on, reachable: true } : t0);
     const st = t.reachable === false ? '<span class="tv-state">○ Hors ligne</span>' : t.on ? '<span class="tv-state on">● Allumée</span>' : '<span class="tv-state">○ Veille</span>';
     const tags = [t.brand && `<span class="tag">${esc(cap(t.brand))}</span>`, t.ip && `<span class="tag">${esc(t.ip)}</span>`,
-      t.needsPsk && '<span class="tag warn">clé PSK requise</span>', t.paired && '<span class="tag ok">appairée</span>'].filter(Boolean).join(' ');
+      t.needsPsk ? '<span class="tag warn">clé PSK requise</span>' : '', t.paired && '<span class="tag ok">appairée</span>'].filter(Boolean).join(' ');
+    const vol = t.volume != null ? `<div class="slider tv-volrow"><span>${t.mute ? '🔇' : '🔊'}</span>
+        <input type="range" min="0" max="100" value="${+t.volume}" data-tvvol="${esc(t.key)}" aria-label="Volume" oninput="onTvVolume(this,${jsArg(t.key)})" onchange="sendTvVolume(${jsArg(t.key)},+this.value)">
+        <span class="val">${t.mute ? 'muet' : +t.volume}</span><button class="icon" aria-label="Muet" title="Muet" onclick="deauMute(${jsArg(t.key)})">🔇</button></div>` : '';
     return `
     <div class="card ${t.on && t.reachable !== false ? 'lit' : ''} ${t.reachable === false ? 'offline' : ''}">
       <div class="row"><div class="grow"><div class="title">📺 ${esc(t.name || t.key)}</div><div class="tags">${tags}</div></div><div class="acts">${timerBtn({ type: 'tvOff', key: t.key }, t.name || t.key)}${st}</div></div>
       <div class="controls"><button class="primary" onclick="openRemote(${jsArg(t.key)})">🎮 Télécommande</button></div>
+      ${vol}
       ${timerBar({ type: 'tvOff', key: t.key })}
     </div>`;
   }).join('');
@@ -1084,6 +1206,8 @@ async function xboxCmd(action, game) {
   const r = await req('/api/xbox', body);
   if (!r.ok) return toast(r.status === 404 ? 'Xbox : en cours de configuration' : 'Xbox : ' + (r.data.error || r.data.message || 'erreur ' + r.status));
   toast(r.data.sent ? '🗣 « ' + r.data.sent + ' »' : 'Commande Xbox envoyée');
+  // Voyant "En ligne / Hors ligne" : relecture tout de suite puis 2,5 s plus tard (la Xbox met quelques secondes a repondre)
+  if (action === 'on' || action === 'off') refreshSoon('deau', loadDeau, [0, 2500, 7000]); else refreshSoon('deau', loadDeau);
 }
 function xboxLaunch(game) {
   const g = (game || ($('xboxGame') ? $('xboxGame').value : '') || '').trim();
@@ -1113,7 +1237,7 @@ async function openRemote(key) {
   $('remoteStatus').textContent = '';
   remoteButtons().forEach(b => b.disabled = true);
   remoteMsg(['Connexion à la télé…']);
-  $('remote').hidden = false; document.body.classList.add('noscroll');
+  $('remote').hidden = false; $('remote').scrollTop = 0; lockScroll(true);
   const r = await req('/api/tv/remote-info?key=' + encodeURIComponent(key));
   if (!remote || remote.key !== key) return;
   if (!r.ok) { remoteMsg([r.status === 404 ? '⚙️ Télécommande en cours de configuration…' : '⚠️ ' + (r.data.error || 'Erreur ' + r.status)]); return; }
@@ -1127,7 +1251,17 @@ async function openRemote(key) {
     !info.needsPsk && info.hint,
   ]);
 }
-function closeRemote() { remote = null; $('remote').hidden = true; document.body.classList.remove('noscroll'); }
+function closeRemote() { remote = null; $('remote').hidden = true; if ($('hist').hidden) lockScroll(false); }
+// Pastille "Allumée / Veille" des teles de Deauville : apres ⏻ sur la telecommande, on bascule tout de suite
+// et on garde cette valeur quelques secondes (le temps que la tele reponde vraiment), puis le serveur reprend la main.
+const tvHold = {};   // key -> { on, until }
+function holdTvPower(key) {
+  const dt = deau && (deau.tvs || []).find(t => t.key === key);
+  if (dt) { const cur = tvHold[key] && Date.now() < tvHold[key].until ? tvHold[key].on : dt.on; tvHold[key] = { on: !cur, until: Date.now() + 12000 }; renderDeauDevices(); }
+  const pt = tvs.find(t => t.key === key);
+  if (pt) { pt.on = !pt.on; renderTvs(); refreshSoon('tv', loadTvs, [1500, 4000]); }
+  if (dt) refreshSoon('deau', loadDeau, [2500, 8000]);
+}
 async function rpress(btn) {
   if (!remote) return;
   const el = document.querySelector(`#remote [data-b="${btn}"]`);
@@ -1138,7 +1272,21 @@ async function rpress(btn) {
   $('remoteStatus').textContent = '→ ' + label;
   const r = await req('/api/tv/remote', { key, button: btn });
   if (!remote || remote.key !== key) return;
-  if (r.ok) { $('remoteStatus').textContent = '✓ ' + label; if (remote.brand.includes('samsung')) remote.paired = true; return; }
+  if (r.ok) {
+    let extra = '';
+    // Volume / muet : le chiffre de la carte suit tout de suite (tele Sony : volume connu)
+    const dt = deau && (deau.tvs || []).find(t => t.key === key);
+    if (dt && dt.volume != null && /^(volup|voldown|mute)$/.test(btn)) {
+      const cur = tvEff(dt);
+      const l = btn === 'mute' ? tvLocalSet(key, { mute: !cur.mute }) : tvLocalSet(key, { volume: Math.max(0, Math.min(100, (+cur.volume || 0) + (btn === 'volup' ? 1 : -1))), mute: false });
+      showTvVolume(key, l.volume, l.mute); extra = l.mute ? ' · muet' : ' · ' + l.volume;
+      refreshSoon('deau', loadDeau, [2500]);
+    }
+    $('remoteStatus').textContent = '✓ ' + label + extra;
+    if (remote.brand.includes('samsung')) remote.paired = true;
+    if (btn === 'power') holdTvPower(key);
+    return;
+  }
   if (r.status === 409 && r.data.error === 'psk') { remoteMsg([r.data.hint || PSK_HINT]); $('remoteStatus').textContent = '✗ clé PSK requise'; return; }
   $('remoteStatus').textContent = r.status === 404 ? '⚙️ en cours de configuration' : '✗ ' + (r.data.error || 'erreur ' + r.status);
   if (r.data.hint) remoteMsg([r.data.hint]);
@@ -1260,8 +1408,8 @@ async function loadHistory() {
   }
   setHtml(el, html);
 }
-function openHistory() { $('hist').hidden = false; document.body.classList.add('noscroll'); loadHistory(); clearInterval(histTimer); histTimer = setInterval(loadHistory, 15000); }
-function closeHistory() { $('hist').hidden = true; document.body.classList.remove('noscroll'); clearInterval(histTimer); histTimer = null; }
+function openHistory() { $('hist').hidden = false; lockScroll(true); loadHistory(); clearInterval(histTimer); histTimer = setInterval(loadHistory, 15000); }
+function closeHistory() { $('hist').hidden = true; if ($('remote').hidden) lockScroll(false); clearInterval(histTimer); histTimer = null; }
 document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (!$('timerPick').hidden) closeTimerPick(); else if (!$('hist').hidden) closeHistory(); });
 
 // ---------- Favoris (localStorage, par maison) ----------
@@ -1300,7 +1448,7 @@ function tick() {
 tick(); setInterval(tick, 10000);
 $('optSalon').checked = !!opts.salon; $('optGrande').checked = !!opts.grande;
 // Paris : la liste des teles ne se rafraichit que sur l'onglet Tele (cache en mode Deauville)
-loadTvs(); setInterval(() => { if (house === 'paris' && !$('tab-tv').hidden) loadTvs(); }, 10000);
+loadTvs(); setInterval(() => { if (house === 'paris' && !$('tab-tv').hidden && !document.hidden) loadTvs(); }, 10000);
 // Deauville : etat des ampoules / teles / Xbox toutes les 3 s, seulement en mode Deauville
 setInterval(() => { if (house === 'deauville' && !document.hidden) loadDeau(); }, 3000);
 setHouse(house);

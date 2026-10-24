@@ -404,6 +404,8 @@
     </div>
   </div>
 
+  <!-- Lumieres Nanoleaf : masquees pour l'instant (pas pilotables depuis l'iHost) -->
+  <div id="deauLights" hidden>
   <h2>Lumières</h2>
   <div class="card" style="margin-bottom:16px">
     <div class="row wrap">
@@ -418,6 +420,7 @@
   </div>
   <div class="grid" id="bulbs"><div class="card sub">Chargement…</div></div>
   <p class="note">ℹ️ Les ampoules Nanoleaf sont pilotées en Bluetooth par le PC : il faut que le PC soit à Deauville, à portée des ampoules. Chaque changement prend environ 4 s par ampoule.</p>
+  </div>
 
   <h2>Télés &amp; Xbox</h2>
   <div class="grid" id="deauTvs"><div class="card sub">Chargement…</div></div>
@@ -853,6 +856,9 @@ function setHouse(h) {
   document.querySelectorAll('#houseSel button').forEach(b => b.classList.toggle('on', b.dataset.h === house));
   if (house === 'paris') { $('tab-deau').hidden = true; showTab(parisTab); load(); }
   else { $('tab-home').hidden = $('tab-tv').hidden = true; $('tab-deau').hidden = false; loadDeau(true); }
+  // Deauville : pas de lumieres pilotables pour l'instant -> pas d'ambiances, de favoris ni de minuteur global
+  $('amb').hidden = $('favSec').hidden = house === 'deauville';
+  const ht = $('hdrTimer'); if (ht) ht.hidden = house === 'deauville';
   renderWeather(); loadAmbiances(); loadAlexa(); renderTimers();
 }
 
@@ -925,7 +931,7 @@ async function runAmbiance(id) {
 }
 function headerAllOff() {
   if (house === 'paris') allOff();
-  else { sendBulb('all', { on: false }); toast('Extinction des ampoules de Deauville…'); }
+  else toast('Rien à éteindre à Deauville (pas de lumières pilotées)');
 }
 
 // ---------- Deauville ----------

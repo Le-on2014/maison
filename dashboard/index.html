@@ -294,7 +294,11 @@
     .clock { font-size: 32px; }
   }
   /* Ecran "code d'acces" (iHost : appareils du reseau). Jamais affiche en local. */
-  #pinGate { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px;
+  /* iPhone : clavier numerique sans touche Entree -> validation automatique a 6 chiffres, formulaire en haut (pas cache par le clavier) */
+  #pinGate { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: start center; padding: max(48px, env(safe-area-inset-top)) 24px 24px; overflow: auto; -webkit-overflow-scrolling: touch; min-height: -webkit-fill-available;
+  #pinGate input { font-size: 22px; letter-spacing: 8px; text-align: center; width: 180px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+  #pinGate button { font-size: 18px; padding: 12px 22px; min-height: 48px; }
+  #pinGate form { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
     background: var(--bg); background-image: radial-gradient(1200px 600px at 10% -10%, #2a1640 0%, transparent 60%), radial-gradient(900px 500px at 110% 10%, #10233d 0%, transparent 55%); }
   #pinGate[hidden] { display: none; }
   .pin-card { width: min(360px, 100%); text-align: center; display: grid; gap: 14px; justify-items: center; }
@@ -505,7 +509,7 @@
     <h1>Code d'accès</h1>
     <div class="sub">Cet appareil n'est pas encore autorisé</div>
     <form id="pinForm" autocomplete="off">
-      <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••" aria-label="Code d'accès" autofocus>
+      <input id="pinInput" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••" aria-label="Code d'accès" enterkeyhint="done" autocomplete="one-time-code">
       <button type="submit" class="primary">Entrer</button>
     </form>
     <div class="err" id="pinErr"></div>
@@ -525,21 +529,28 @@
     return r;
   };
   realFetch('/api/login-required', { cache: 'no-store' }).then(r => r.json()).then(j => { if (j && j.required) show(); }).catch(() => {});
+  const pinInput = document.getElementById('pinInput');
+  let sending = false;
+  // Sur iPhone le pave numerique n'a pas de touche Entree : on valide tout seul a 6 chiffres
+  pinInput.addEventListener('input', () => { pinInput.value = pinInput.value.replace(/\D/g, '').slice(0, 6); if (pinInput.value.length === 6) document.getElementById('pinForm').requestSubmit(); });
   document.getElementById('pinForm').addEventListener('submit', async ev => {
     ev.preventDefault();
-    const input = document.getElementById('pinInput'), err = document.getElementById('pinErr');
+    if (sending) return;
+    const input = pinInput, err = document.getElementById('pinErr');
     const pin = input.value.trim();
     if (!/^\d{4,6}$/.test(pin)) { err.textContent = 'Le code fait 4 à 6 chiffres'; return; }
-    err.textContent = '';
+    err.textContent = 'Vérification…';
+    sending = true;
     try {
-      const r = await realFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin }) });
+      const r = await realFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin }), credentials: 'same-origin' });
       const j = await r.json().catch(() => ({}));
-      if (r.ok) { location.reload(); return; }
+      sending = false;
+      if (r.ok) { err.textContent = ''; gate.hidden = true; input.blur(); location.reload(); return; }
       if (r.status === 429) err.textContent = `Trop d'essais : réessaie dans ${Math.ceil((j.retryAfter || 600) / 60)} min`;
       else if (j.error === 'pin-not-set') err.textContent = 'Aucun code configuré (variable MAISON_PIN)';
       else err.textContent = j.remaining != null ? `Code incorrect (${j.remaining} essai${j.remaining > 1 ? 's' : ''} restant${j.remaining > 1 ? 's' : ''})` : 'Code incorrect';
       input.value = ''; input.focus();
-    } catch (e) { err.textContent = 'Serveur injoignable'; }
+    } catch (e) { sending = false; err.textContent = 'Serveur injoignable'; }
   });
 })();
 

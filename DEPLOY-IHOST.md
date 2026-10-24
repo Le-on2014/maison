@@ -41,7 +41,24 @@ volume `/data` au premier démarrage.
    Quand c'est vert, le résumé affiche « Image Docker Hub : docker.io/leonleonbj/maison:latest ».
    L'image est publique par défaut sur Docker Hub ; elle ne contient aucun secret (voir `.dockerignore`).
 
-## 3. Préparer les variables d'environnement (sur ce PC)
+## 3. Préparer la configuration (sur ce PC)
+
+### Méthode simple : UNE seule variable `MAISON_BOOTSTRAP`
+
+```powershell
+.\prepare-env.ps1 -Bootstrap | Set-Clipboard
+```
+Le script n'écrit rien sur disque : il met dans le presse-papiers **une seule valeur** (base64 d'un JSON gzippé qui
+contient `hue-config.json`, `alexa\alexa-cookie.json`, `dashboard\tv-tokens.json`, `dashboard\deauville-config.json`
+et les réglages `MAISON_PIN`, `MAISON_LAN_IP`, `ALEXA_PROXY_IP`, `TZ`) et affiche à l'écran le code PIN tiré au hasard
+(`PIN=…`, à noter). Pour choisir le PIN ou l'IP de l'iHost : `.\prepare-env.ps1 -Bootstrap -Pin 123456 -IHostIp 192.168.1.91`.
+
+Dans l'iHost, une seule variable d'environnement à créer : **`MAISON_BOOTSTRAP`** = la valeur collée (sans guillemets).
+Au premier démarrage, le serveur en extrait les fichiers dans `/data` (seulement ceux qui n'existent pas encore) et
+applique les réglages (seulement ceux qui ne sont pas déjà définis comme variable à part : une variable `MAISON_PIN`
+saisie à la main garde la priorité). `MAISON_BIND=0.0.0.0`, `MAISON_DATA=/data` et `TZ` sont déjà dans l'image.
+
+### Alternative : une variable par fichier
 
 ```powershell
 .\prepare-env.ps1
@@ -71,9 +88,9 @@ Variables :
 [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\alexa\alexa-cookie.json'))
 ```
 
-Ces variables ne servent **qu'au premier démarrage** : ensuite les fichiers vivent dans le volume `/data` et sont mis à jour
-par le serveur (cookie Amazon rafraîchi, jeton d'une nouvelle télé…). Pour forcer une nouvelle valeur plus tard :
-supprimer le volume (ou le fichier concerné) et redémarrer le conteneur.
+Dans les deux méthodes, ces valeurs ne servent **qu'au premier démarrage** : ensuite les fichiers vivent dans le volume
+`/data` et sont mis à jour par le serveur (cookie Amazon rafraîchi, jeton d'une nouvelle télé…). Pour forcer une
+nouvelle valeur plus tard : supprimer le volume (ou le fichier concerné) et redémarrer le conteneur.
 
 ## 4. Créer le conteneur sur l'iHost
 
@@ -86,11 +103,12 @@ supprimer le volume (ou le fichier concerné) et redémarrer le conteneur.
      Wake-on-LAN de la Samsung 43" fonctionne). Sinon, mode *bridge* avec les ports :
      `8090 → 8090` (dashboard), `8091 → 8091` (texte sur les télés), `3001 → 3001` (reconnexion Amazon, optionnel).
    - **Volume** : volume nommé `maison-data` monté sur `/data` dans le conteneur.
-   - **Variables d'environnement** : celles de l'étape 3, une par une (nom = valeur, sans guillemets).
+   - **Variables d'environnement** : une seule, `MAISON_BOOTSTRAP` = la valeur de l'étape 3 (nom = valeur, sans
+     guillemets). Avec la méthode alternative : les variables de l'étape 3, une par une.
    - **Redémarrage** : *always* / *unless-stopped*.
 4. Démarrer. Dans les journaux du conteneur, on doit voir :
-   `[config] hue-config.json cree depuis HUE_CONFIG dans /data`, `… alexa-cookie.json …`, puis
-   `Dashboard : http://localhost:8090` et `Alexa connectee.`
+   `[config] hue-config.json cree depuis MAISON_BOOTSTRAP dans /data`, `… alexa-cookie.json …` (ou `… depuis HUE_CONFIG …`
+   avec la méthode alternative), puis `Dashboard : http://localhost:8090` et `Alexa connectee.`
 5. Test : `http://192.168.1.91:8090` depuis un téléphone → écran « code » → `MAISON_PIN` → dashboard.
    Depuis l'iHost lui-même (127.0.0.1) aucun code n'est demandé.
 
@@ -122,6 +140,7 @@ supprimer le volume (ou le fichier concerné) et redémarrer le conteneur.
 |---|---|
 | `hue-config.json introuvable dans /data (ou variable HUE_CONFIG)` au démarrage | variable absente ou mal collée (il faut le JSON entier, `{…}`) |
 | `[config] ALEXA_COOKIE ignore : ni JSON ni base64 de JSON` | valeur tronquée au collage : réessayer avec `-Only ALEXA_COOKIE \| Set-Clipboard` |
+| `[config] MAISON_BOOTSTRAP ignore : ni JSON ni base64 de JSON` | valeur tronquée au collage : refaire `.\prepare-env.ps1 -Bootstrap \| Set-Clipboard` et recoller |
 | 403 `pin-not-set` depuis un téléphone | `MAISON_PIN` absent ou pas 4–6 chiffres |
 | « manifest unknown » au téléchargement sur l'iHost | paquet encore privé (étape 2) ou Action pas terminée |
 | Les télés n'affichent pas le texte | `MAISON_LAN_IP` manquant ou port 8091 non exposé (préférer le réseau *host*) |

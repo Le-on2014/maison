@@ -4,7 +4,7 @@
 // - Dans le conteneur (iHost) : MAISON_DATA=/data (volume). Au 1er demarrage, un fichier absent de /data est
 //   cree a partir de la variable d'environnement correspondante (JSON brut, ou base64 d'un JSON, ou base64 d'un
 //   JSON gzippe). Ensuite c'est le fichier de /data qui fait foi (mis a jour par le serveur : cookie Amazon
-//   rafraichi, jeton de tele, etc.).
+//   rafraichi, jeton de tele, etc.). Variante tout-en-un : MAISON_BOOTSTRAP (voir applyBootstrapBundle).
 // - Un fichier absent partout tombe sur la copie livree avec le code (ex. ambiances.json), puis sur `fallback`.
 const fs = require('fs');
 const path = require('path');
@@ -85,7 +85,7 @@ function readJson(name, fallback) {
     }
     if (fallback !== undefined) return fallback;
     const varName = ENV_FILES[path.basename(name)];
-    throw new Error(`${name} introuvable dans ${dataDir}${varName ? ` (ou variable d'environnement ${varName})` : ''}`);
+    throw new Error(`${name} introuvable dans ${dataDir}${varName ? ` (ou variable d'environnement ${varName} / MAISON_BOOTSTRAP)` : ''}`);
 }
 
 function writeJson(name, obj) {
@@ -93,6 +93,44 @@ function writeJson(name, obj) {
 }
 
 const exists = name => fs.existsSync(filePath(name)) || (bootstrap(name) && fs.existsSync(filePath(name)));
+
+// ---------- MAISON_BOOTSTRAP : tout en une seule variable ----------
+// base64 (gzip facultatif) d'un JSON :
+//   { "files": { "hue-config.json": {...}, "alexa-cookie.json": {...}, ... },
+//     "env":   { "MAISON_PIN": "123456", "MAISON_LAN_IP": "192.168.1.91", "ALEXA_PROXY_IP": "...", "TZ": "Europe/Paris" } }
+// Produit par `.\prepare-env.ps1 -Bootstrap`. Memes regles que les variables par fichier : un fichier n'est cree dans
+// dataDir que s'il n'existe pas encore ; une entree `env` n'est appliquee que si la variable n'est pas deja definie
+// (une variable saisie a la main dans l'iHost garde donc la priorite). Doit tourner AVANT la lecture des reglages.
+function applyBootstrapBundle() {
+    if (!env.MAISON_BOOTSTRAP) return;
+    const text = decodeEnv(env.MAISON_BOOTSTRAP);
+    if (!text) { console.log('[config] MAISON_BOOTSTRAP ignore : ni JSON ni base64 de JSON'); return; }
+    let bundle;
+    try { bundle = parse(text, 'MAISON_BOOTSTRAP'); } catch (e) { console.log(`[config] ${e.message}`); return; }
+    if (!bundle || typeof bundle !== 'object' || Array.isArray(bundle)) {
+        console.log('[config] MAISON_BOOTSTRAP ignore : il faut un objet { files, env }');
+        return;
+    }
+    const files = (bundle.files && typeof bundle.files === 'object') ? bundle.files : {};
+    for (const [name, value] of Object.entries(files)) {
+        if (value === null || value === undefined) continue;
+        const base = path.basename(name);
+        if (!/\.json$/i.test(base)) { console.log(`[config] MAISON_BOOTSTRAP : ${name} ignore (pas un .json)`); continue; }
+        if (fs.existsSync(filePath(base))) continue;      // le fichier de dataDir fait foi
+        try {
+            const obj = typeof value === 'string' ? parse(value, base) : value;   // objet direct, ou JSON en texte
+            writeText(base, JSON.stringify(obj, null, 2));
+            console.log(`[config] ${base} cree depuis MAISON_BOOTSTRAP dans ${dataDir}`);
+        } catch (e) { console.log(`[config] ${e.message}`); }
+    }
+    const vars = (bundle.env && typeof bundle.env === 'object') ? bundle.env : {};
+    for (const [key, value] of Object.entries(vars)) {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || value === null || value === undefined) continue;
+        if (String(env[key] || '').trim()) continue;      // deja definie : on ne touche pas
+        env[key] = String(value);
+    }
+}
+applyBootstrapBundle();
 
 // ---------- reglages serveur ----------
 const pin = /^\d{4,6}$/.test(String(env.MAISON_PIN || '').trim()) ? String(env.MAISON_PIN).trim() : null;

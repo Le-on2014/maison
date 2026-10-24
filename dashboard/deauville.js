@@ -139,10 +139,12 @@ async function sonyIrcc(name) {
     sonyPskRejected = null;
 }
 
+// Renvoie le nouvel etat (true = allumee)
 async function sonyPowerToggle() {
     const st = await sonyApi('system', 'getPowerStatus');
     const on = st && st[0] && st[0].status === 'active';
     await sonyApi('system', 'setPowerStatus', [{ status: !on }], true);
+    return !on;
 }
 
 // Mise en veille (minuteurs) : ne fait rien si la tele est deja eteinte

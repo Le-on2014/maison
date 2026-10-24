@@ -651,7 +651,20 @@ function onVolume(el, serial) {
   if (d) d.volume = +el.value;
   sendVolume(serial, +el.value);
 }
-function media(serial, action) { Promise.all(withTvs(serial).map(s => api('/api/alexa/media', { serial: s, action }))).then(() => toast('OK')); }
+// Relecture ciblee apres une action : tout de suite, puis ~2,5 s plus tard (dedoublonnee par cle)
+const soonTimers = {};
+function refreshSoon(key, fn, delays = [0, 2500]) {
+  delays.forEach(ms => { const k = key + ms; clearTimeout(soonTimers[k]); soonTimers[k] = setTimeout(() => { delete soonTimers[k]; fn(); }, ms); });
+}
+function media(serial, action) {
+  // Affichage optimiste : le bouton ▶/⏸ bascule tout de suite, retour arriere si la commande echoue
+  const d = state.alexa.devices && state.alexa.devices.find(x => x.serial === serial);
+  const prev = d && d.player ? d.player.state : null;
+  if (d && d.player && (action === 'play' || action === 'pause')) { d.player.state = action === 'play' ? 'PLAYING' : 'PAUSED'; renderAlexa(); }
+  Promise.all(withTvs(serial).map(s => api('/api/alexa/media', { serial: s, action })))
+    .then(() => { toast('OK'); refreshSoon('alexa', loadAlexa); })
+    .catch(() => { if (d && d.player && prev) { d.player.state = prev; renderAlexa(); } });
+}
 // Alexa renvoie progress/length en secondes (on tolere aussi des millisecondes : > 20000 = ms)
 const toSec = v => { v = +v || 0; return v > 20000 ? v / 1000 : v; };
 function fmt(v) { const s = Math.max(0, Math.round(toSec(v))); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
@@ -787,7 +800,14 @@ function draft(key) {
   tvDraft[key] = { text, color };
   const p = $('prev-' + key); p.textContent = text || 'Aperçu du texte à l\'écran'; p.classList.toggle('empty', !text); p.style.color = color;
 }
-function tvPower(key, on) { api('/api/tv/power', { key, on }).then(() => { toast(on ? 'Allumage…' : 'Extinction…'); setTimeout(loadTvs, 3000); }); }
+function tvPower(key, on) {
+  // Affichage optimiste : pastille "Allumée / Veille" et halo tout de suite, retour arriere si la commande echoue
+  const t = tvs.find(x => x.key === key), prev = t ? t.on : undefined;
+  if (t) { t.on = on; renderTvs(); }
+  api('/api/tv/power', { key, on })
+    .then(() => { toast(on ? 'Allumage…' : 'Extinction…'); refreshSoon('tv', loadTvs); })
+    .catch(() => { if (t) { t.on = prev; renderTvs(); } });
+}
 function tvVol(key, steps) { toast('Volume télé… (accepte « Autoriser » sur la télé si demandé)'); api('/api/tv/volume', { key, steps }).then(() => toast(`Volume télé ${steps > 0 ? '+' : ''}${steps}`)); }
 function tvMute(key) { api('/api/tv/mute', { key }).then(() => toast('Muet / son')); }
 function tvText(key, alsoSay) {

@@ -115,6 +115,25 @@ async function refreshAlexa() {
     }));
 }
 
+// Relecture d'un seul Echo apres une action (dedoublonnee : un seul minuteur par Echo)
+const playerTimers = {};
+async function refreshPlayer(serial) {
+    if (!alexa) return;
+    try {
+        const r = await cb(c => alexa.getPlayerInfo(serial, c));
+        const p = r && r.playerInfo;
+        players[serial] = p && p.infoText && p.infoText.title ? {
+            state: p.state, title: p.infoText.title, artist: p.infoText.subText1 || '', album: p.infoText.subText2 || '',
+            art: p.mainArt && p.mainArt.url, provider: p.provider && p.provider.providerName,
+            progress: p.progress && p.progress.mediaProgress, length: p.progress && p.progress.mediaLength,
+        } : null;
+    } catch (e) { /* reseau */ }
+}
+function refreshPlayerSoon(serial, ms) {
+    clearTimeout(playerTimers[serial]);
+    playerTimers[serial] = setTimeout(() => { delete playerTimers[serial]; refreshPlayer(serial); }, ms);
+}
+
 function alexaState() {
     if (!alexa) return { ready: false, error: alexaError };
     return {
@@ -162,7 +181,7 @@ const TVS = [
     { key: 'samsung43', house: 'deauville', name: 'Samsung 43"', size: '43"', ip: '192.168.1.133', model: 'TQ43QN90FATXXC', mac: '04:E4:B6:B9:ED:B4' },
 ];
 const dvLib = require('./deauville');
-const tvPower = {};
+const tvPower = {}, tvSetAt = {};   // tvSetAt : heure du dernier allumage/extinction demande (etat optimiste)
 let tvTokens = config.readJson(TOKENS_FILE, {});   // {} = pas encore appairee
 if (!tvTokens || typeof tvTokens !== 'object') tvTokens = {};
 const saveTvTokens = () => { try { config.writeJson(TOKENS_FILE, tvTokens); } catch (e) { console.log('[tv] tv-tokens.json :', e.message); } };
@@ -185,7 +204,8 @@ async function refreshTvPower() {
         (r.deviceStates || []).forEach(s => {
             const tv = TVS.find(t => t.entity === s.entity.entityId);
             const p = (s.capabilityStates || []).map(c => JSON.parse(c)).find(c => c.namespace === 'Alexa.PowerController');
-            if (tv && p) tvPower[tv.key] = p.value === 'ON';
+            // 8 s apres un allumage/extinction, l'etat Alexa peut etre en retard : on garde l'etat demande
+            if (tv && p && Date.now() - (tvSetAt[tv.key] || 0) > 8000) tvPower[tv.key] = p.value === 'ON';
         });
     } catch (e) { /* reseau */ }
 }
@@ -199,8 +219,10 @@ async function tvSetPower(tv, on) {
         return;
     }
     await cb(c => alexa.executeSmarthomeDeviceAction(tv.entity, { action: on ? 'turnOn' : 'turnOff' }, c));
-    tvPower[tv.key] = on;
+    tvPower[tv.key] = on; tvSetAt[tv.key] = Date.now();
+    clearTimeout(tvPowerTimer); tvPowerTimer = setTimeout(refreshTvPower, 9000);   // confirmation ciblee, dedoublonnee
 }
+let tvPowerTimer = null;
 
 // Connexion locale a la tele ; la 1re fois elle affiche "Autoriser ?" (30 s pour accepter)
 async function tvSocket(tv) {
@@ -362,7 +384,10 @@ const routes = {
     'POST /api/alexa/media': async b => {
         if (!['play', 'pause', 'next', 'previous'].includes(b.action)) throw new Error('Action invalide');
         await cb(c => alexa.sendCommand(b.serial, b.action, null, c));
-        setTimeout(refreshAlexa, 1200);
+        // Etat optimiste tout de suite (le prochain GET /api/alexa le reflete), puis relecture ciblee de cet Echo
+        const p = players[b.serial];
+        if (p && (b.action === 'play' || b.action === 'pause')) p.state = b.action === 'play' ? 'PLAYING' : 'PAUSED';
+        refreshPlayerSoon(b.serial, 1500);
         return {};
     },
     'POST /api/alexa/music': async b => {

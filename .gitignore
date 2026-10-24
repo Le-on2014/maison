@@ -1,0 +1,28 @@
+# Secrets : ne JAMAIS commiter
+hue-config.json
+**/hue-config.json
+**/alexa-cookie.json
+**/tv-tokens.json
+**/deauville-config.json
+**/access.json
+backup-*.json
+**/backup-*.json
+nanoleaf*
+**/nanoleaf*
+
+# Donnees d'execution
+**/history.json
+**/timers.json
+**/*.log
+
+# Dependances / environnements
+**/node_modules/
+**/venv/
+**/.venv/
+**/__pycache__/
+Deauville/
+
+# Windows / editeurs
+Thumbs.db
+desktop.ini
+.vscode/

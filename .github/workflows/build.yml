@@ -1,0 +1,72 @@
+# Construit l'image multi-arch (armv7 pour le Sonoff iHost + amd64 pour tester sur PC) et la pousse sur GHCR.
+#
+# IMPORTANT : apres le 1er build, rendre le paquet PUBLIC pour que l'iHost puisse le tirer sans identifiants :
+#   GitHub -> ta page de profil -> Packages -> maison -> Package settings -> Danger Zone -> Change visibility -> Public
+#   (l'image ne contient aucun secret : voir .dockerignore ; les secrets arrivent par variables d'environnement)
+name: Build & push image maison
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '*.ps1'
+      - '*.psm1'
+      - '*.cmd'
+      - '*.vbs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: build-image
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: QEMU (emulation arm/v7)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+
+      - name: Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR exige un nom en minuscules : Le-on2014 -> ghcr.io/le-on2014/maison
+      - name: Nom de l'image
+        id: img
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/maison" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm/v7,linux/amd64
+          push: true
+          # provenance/sbom desactives : evite les manifestes "unknown/unknown" que certains Docker embarques digerent mal
+          provenance: false
+          sbom: false
+          tags: |
+            ${{ steps.img.outputs.name }}:latest
+            ${{ steps.img.outputs.name }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Resume
+        run: |
+          echo "Image : ${{ steps.img.outputs.name }}:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pense a rendre le paquet PUBLIC (Packages -> maison -> Package settings -> Change visibility)." >> "$GITHUB_STEP_SUMMARY"

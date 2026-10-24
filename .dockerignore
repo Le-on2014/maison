@@ -1,0 +1,34 @@
+# --- jamais dans l'image (image PUBLIQUE sur GHCR) ---
+hue-config.json
+**/hue-config.json
+**/alexa-cookie.json
+**/tv-tokens.json
+**/deauville-config.json
+**/access.json
+**/history.json
+**/timers.json
+backup-*.json
+**/backup-*.json
+nanoleaf*
+**/nanoleaf*
+
+# --- inutile dans l'image ---
+**/node_modules
+**/*.log
+**/venv
+**/.venv
+**/__pycache__
+.git
+.github
+.gitignore
+.dockerignore
+Dockerfile
+*.md
+*.ps1
+*.psm1
+*.cmd
+*.vbs
+Deauville/
+alexa/alexa-cli.js
+alexa/hue-alexa.js
+alexa/login.js

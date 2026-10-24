@@ -1,0 +1,48 @@
+{
+  "_aide": "Ambiances en un clic. Types d'etapes : hueScene {name, room?}, hueRoom {name, on | brightness}, alexaVolume {device, volume}, alexaStop {device}, alexaSpeak {device, text}, nanoleaf {id: D47|7ED|all, on | brightness | hue+saturation | kelvin}, wait {ms}. Modifiable sans redemarrer.",
+  "ambiances": [
+    {
+      "id": "gaming", "name": "Gaming", "emoji": "🎮",
+      "paris": [
+        { "type": "hueScene", "name": "Givre fuchsia max", "room": "Chambre Léon" },
+        { "type": "alexaVolume", "device": "Chambre", "volume": 25 }
+      ],
+      "deauville": [
+        { "type": "nanoleaf", "id": "all", "hue": 280, "saturation": 100 },
+        { "type": "nanoleaf", "id": "all", "brightness": 60 }
+      ]
+    },
+    {
+      "id": "dodo", "name": "Dodo", "emoji": "🌙",
+      "paris": [
+        { "type": "hueScene", "name": "Veilleuse", "room": "Chambre Léon" },
+        { "type": "alexaVolume", "device": "Chambre", "volume": 10 }
+      ],
+      "deauville": [
+        { "type": "nanoleaf", "id": "all", "kelvin": 2700 },
+        { "type": "nanoleaf", "id": "all", "brightness": 10 }
+      ]
+    },
+    {
+      "id": "sortie", "name": "Sortie", "emoji": "🚪",
+      "paris": [
+        { "type": "hueRoom", "name": "Chambre Léon", "on": false },
+        { "type": "alexaStop", "device": "Chambre" }
+      ],
+      "deauville": [
+        { "type": "nanoleaf", "id": "all", "on": false },
+        { "type": "alexaStop", "device": "Deauville" }
+      ]
+    },
+    {
+      "id": "matin", "name": "Matin", "emoji": "☀️",
+      "paris": [
+        { "type": "hueScene", "name": "Lumineux", "room": "Chambre Léon" }
+      ],
+      "deauville": [
+        { "type": "nanoleaf", "id": "all", "kelvin": 4000 },
+        { "type": "nanoleaf", "id": "all", "brightness": 100 }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1273 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maison</title>
+<link rel="icon" type="image/png" sizes="256x256" href="/icon-256.png?v=2">
+<link rel="icon" type="image/x-icon" href="/favicon.ico?v=2">
+<link rel="apple-touch-icon" href="/icon-256.png?v=2">
+<link rel="manifest" href="/manifest.webmanifest?v=2">
+<meta name="theme-color" content="#0e1015">
+<style>
+  :root {
+    --bg: #0e1015; --panel: #171a21; --panel-2: #1f232c; --line: #2a2f3a;
+    --text: #eef0f4; --muted: #8b92a3; --accent: #ff4fd8; --accent-2: #7c5cff;
+    --ok: #3ddc97; --warn: #ffb547; --radius: 18px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 "Segoe UI", system-ui, sans-serif;
+    background-image: radial-gradient(1200px 600px at 10% -10%, #2a1640 0%, transparent 60%),
+                      radial-gradient(900px 500px at 110% 10%, #10233d 0%, transparent 55%);
+    background-attachment: fixed; min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 22px 28px 8px; flex-wrap: wrap;
+  }
+  .clock { font-size: 40px; font-weight: 300; letter-spacing: -1px; }
+  .date { color: var(--muted); text-transform: capitalize; }
+  .status { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  main { padding: 8px 28px 40px; max-width: 1400px; margin: 0 auto; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 600; margin: 26px 0 12px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .card {
+    background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 18px; position: relative; overflow: hidden;
+    backdrop-filter: blur(10px);
+  }
+  .card.lit { border-color: color-mix(in srgb, var(--glow, var(--accent)) 50%, var(--line)); }
+  .card.lit::before {
+    content: ""; position: absolute; inset: -40% -20% auto auto; width: 70%; height: 120%;
+    background: radial-gradient(closest-side, var(--glow, var(--accent)), transparent); opacity: .18; pointer-events: none;
+  }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .title { font-size: 19px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 13px; }
+  button, .btn {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+    padding: 8px 14px; font: inherit; cursor: pointer; transition: .15s;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: 0; }
+  button.icon { width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 18px; display: grid; place-items: center; }
+  button.big { width: 56px; height: 56px; font-size: 22px; }
+  .switch { position: relative; width: 52px; height: 30px; flex: none; }
+  .switch input { display: none; }
+  .switch span { position: absolute; inset: 0; background: #3a3f4b; border-radius: 30px; cursor: pointer; transition: .2s; }
+  .switch span::after { content: ""; position: absolute; width: 24px; height: 24px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + span { background: var(--glow, var(--accent)); }
+  .switch input:checked + span::after { transform: translateX(22px); }
+  input[type=range] { width: 100%; accent-color: var(--glow, var(--accent)); height: 28px; }
+  .slider { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  .slider .val { width: 42px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .chip { padding: 6px 12px; border-radius: 999px; font-size: 13px; background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; }
+  .chip:hover, .chip.active { border-color: var(--accent); color: #fff; }
+  .chip.active { background: color-mix(in srgb, var(--accent) 25%, var(--panel-2)); }
+  details { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 13px; list-style: none; }
+  summary::before { content: "▸ "; }
+  details[open] summary::before { content: "▾ "; }
+  .light { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; margin-top: 10px; }
+  .light.off-net { opacity: .45; }
+  .swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--line); overflow: hidden; position: relative; cursor: pointer; }
+  .swatch input { position: absolute; inset: -8px; width: 50px; height: 50px; opacity: 0; cursor: pointer; }
+  .light .name { font-size: 14px; }
+  .light input[type=range] { height: 18px; }
+  .player { display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: center; }
+  .art { width: 96px; height: 96px; border-radius: 14px; background: var(--panel-2) center/cover; display: grid; place-items: center; font-size: 34px; color: var(--muted); }
+  .track { min-width: 0; }
+  .track .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track .a { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .controls { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+  .progress { height: 4px; background: var(--line); border-radius: 4px; margin-top: 10px; overflow: hidden; }
+  .progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+  .offline { opacity: .5; }
+  .bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .bar input[type=text], .bar select {
+    flex: 1; min-width: 160px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 14px; font: inherit;
+  }
+  .mini-vols { display: grid; gap: 8px; margin-top: 8px; }
+  .mini-vols .slider { margin-top: 0; }
+  .mini-vols .n { width: 120px; flex: none; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mini-vols .n .tag { display: inline-block; vertical-align: middle; }
+  @media (min-width: 900px) { .mini-vols { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 8px 28px; } }
+  .bar > input[type=text], .bar > select { max-width: 520px; }
+  .card.warn { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); background: color-mix(in srgb, var(--warn) 8%, var(--panel)); }
+  .card.warn .title { color: var(--warn); font-size: 16px; }
+  .big-ico { font-size: 28px; flex: none; }
+  .tv-pow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+  .tv-pow .span2 { grid-column: 1 / -1; }
+  .tv-vol { display: grid; grid-template-columns: 1fr 44px 1fr 44px 1fr; gap: 8px; margin-top: 10px; align-items: center; }
+  .tv-vol button { padding-left: 6px; padding-right: 6px; white-space: nowrap; }
+  .tv-vol .icon { justify-self: center; }
+  #toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: #2b1c2f; border: 1px solid var(--accent); padding: 10px 18px; border-radius: 12px; opacity: 0; transition: .25s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+  .tabs { display: flex; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px; }
+  .tabs button { border: 0; background: transparent; padding: 8px 16px; border-radius: 10px; }
+  .tabs button.on { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+  .opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .opt input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .tv-state { font-size: 13px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); }
+  .tv-state.on { color: var(--ok); border-color: var(--ok); }
+  .tv-preview { margin-top: 14px; aspect-ratio: 16/9; background: #000; border-radius: 12px; border: 6px solid #1b1d22;
+    display: flex; align-items: center; justify-content: center; text-align: center; padding: 6%; font-weight: 700; font-size: 28px; overflow: hidden; word-break: break-word; }
+  .tv-preview.empty { color: #444; font-weight: 400; font-size: 14px; }
+  .stack { display: grid; gap: 10px; margin-top: 14px; }
+  .bar input[type=color] { width: 44px; height: 42px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); padding: 4px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 36px; height: 36px; border-radius: 10px; flex: none; box-shadow: 0 2px 10px rgba(0, 0, 0, .4); }
+  .brand { flex-wrap: wrap; }
+  .weather { padding-left: 14px; margin-left: 2px; border-left: 1px solid var(--line); }
+  .w-now { font-size: 20px; font-weight: 500; white-space: nowrap; }
+  .w-more { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .w-more i { font-style: normal; }
+  /* ---- ambiances ---- */
+  .amb-grid { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .amb { position: relative; min-height: 104px; border-radius: var(--radius); border: 1px solid rgba(255, 255, 255, .12); padding: 16px;
+    text-align: left; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; overflow: hidden;
+    background: var(--amb, linear-gradient(135deg, #3a3f4b, #22252d)); box-shadow: 0 6px 18px rgba(0, 0, 0, .35); transition: transform .1s, filter .15s; }
+  .amb:hover { border-color: rgba(255, 255, 255, .35); filter: brightness(1.08); }
+  .amb:active { transform: scale(.97); }
+  .amb .e { font-size: 30px; line-height: 1; }
+  .amb .n { font-size: 17px; font-weight: 700; text-shadow: 0 1px 6px rgba(0, 0, 0, .4); }
+  .amb .p { font-size: 12px; color: rgba(255, 255, 255, .85); min-height: 16px; }
+  .amb.running { outline: 2px solid #fff; outline-offset: 2px; }
+  .amb.running .spin { border-color: rgba(255, 255, 255, .3); border-top-color: #fff; }
+  .amb:disabled { cursor: progress; }
+  .amb.gaming { --amb: linear-gradient(135deg, #7c3aed, #c026d3 55%, #22d3ee); box-shadow: 0 6px 22px rgba(192, 38, 211, .35); }
+  .amb.dodo { --amb: linear-gradient(135deg, #0b1437, #1e3a8a 60%, #312e81); }
+  .amb.sortie { --amb: linear-gradient(135deg, #374151, #4b5563 60%, #1f2937); }
+  .amb.matin { --amb: linear-gradient(135deg, #f97316, #f59e0b 55%, #fde047); }
+  .amb.matin .n, .amb.matin .p { color: #2a1600; text-shadow: none; }
+  @media (max-width: 900px) { .amb-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* ---- maison (Paris / Deauville) ---- */
+  .heads { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  body[data-house="deauville"] .paris-only, body[data-house="paris"] .deau-only { display: none !important; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 14px; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; margin-right: 4px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
+  .tag.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+  .chips .swatch { width: 32px; height: 32px; }
+  .cfg { color: var(--muted); }
+  .grow { flex: 1; min-width: 0; }
+  .row.wrap { flex-wrap: wrap; }
+  .row.wrap > .grow { min-width: 180px; }
+  .grow .title { overflow-wrap: anywhere; }
+  .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .tv-state { white-space: nowrap; flex: none; }
+  .xb-big { flex: 1; min-height: 48px; font-size: 16px; font-weight: 600; }
+  .card.xbox .controls { flex-wrap: nowrap; }
+  /* ---- telecommande ---- */
+  body.noscroll { overflow: hidden; }
+  #remote { position: fixed; inset: 0; z-index: 50; background: rgba(5, 6, 10, .8); backdrop-filter: blur(8px);
+    display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; padding: 16px; }
+  .remote { width: 100%; max-width: 340px; margin: auto 0; background: linear-gradient(180deg, #252831, #14161b);
+    border: 1px solid #343946; border-radius: 44px; padding: 20px 18px 24px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .65), inset 0 1px 0 rgba(255, 255, 255, .07); }
+  .remote .row { margin-bottom: 12px; }
+  .r-msg { background: color-mix(in srgb, var(--warn) 12%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line));
+    color: #ffe2b0; border-radius: 14px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; white-space: pre-line; }
+  .rb { min-height: 56px; border-radius: 16px; font-size: 17px; padding: 6px; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent; background: linear-gradient(180deg, #30343f, #23262e); border: 1px solid #3b404d;
+    box-shadow: 0 4px 0 #0a0b0f, inset 0 1px 0 rgba(255, 255, 255, .08); transition: transform .07s, box-shadow .07s, filter .07s; }
+  .rb small { display: block; font-size: 11px; color: var(--muted); }
+  .rb:active:not(:disabled), .rb.pressed { transform: translateY(4px) scale(.96); box-shadow: 0 0 0 #0a0b0f, inset 0 3px 8px rgba(0, 0, 0, .55); filter: brightness(1.25); }
+  .rb:disabled { opacity: .22; cursor: not-allowed; }
+  .rb:hover:not(:disabled) { border-color: var(--accent); }
+  .rb.power { background: linear-gradient(180deg, #ef4b52, #b3222a); border-color: #ff6f75; font-size: 22px; }
+  .r-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .r-g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+  .dpad { width: 228px; height: 228px; margin: 20px auto 6px; border-radius: 50%; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+    background: radial-gradient(circle, #2c3039 0 55%, #1c1f26 56%); border: 1px solid #3b404d; box-shadow: 0 6px 0 #0a0b0f, inset 0 1px 0 rgba(255, 255, 255, .06); padding: 6px; }
+  .dpad .rb { border-radius: 50%; background: transparent; border-color: transparent; box-shadow: none; font-size: 22px; }
+  .dpad .rb:active:not(:disabled), .dpad .rb.pressed { background: rgba(255, 255, 255, .07); transform: scale(.92); box-shadow: none; }
+  .dpad .ok { grid-area: 2 / 2; background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: 0; box-shadow: 0 3px 0 #0a0b0f; font-weight: 700; font-size: 18px; }
+  .dpad .ok:active:not(:disabled), .dpad .ok.pressed { background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: none; }
+  .dpad .up { grid-area: 1 / 2; } .dpad .left { grid-area: 2 / 1; } .dpad .right { grid-area: 2 / 3; } .dpad .down { grid-area: 3 / 2; }
+  .r-rock { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: center; margin-top: 16px; }
+  .rocker { display: grid; grid-template-rows: auto auto auto; border-radius: 30px; background: #1a1d23; border: 1px solid #343946; padding: 4px; gap: 2px; text-align: center; }
+  .rocker .rb { border-radius: 26px; font-size: 22px; }
+  .rocker span { font-size: 11px; letter-spacing: 1.5px; color: var(--muted); padding: 2px 0; }
+  .rb.mute { width: 60px; height: 60px; border-radius: 50%; }
+  .r-digits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+  .r-digits .rb { min-height: 50px; border-radius: 50px; font-size: 19px; font-variant-numeric: tabular-nums; }
+  .r-digits .zero { grid-column: 2; }
+  .r-status { text-align: center; margin-top: 14px; min-height: 18px; font-size: 12px; }
+  .r-keys { text-align: center; font-size: 11px; color: #5d6474; margin-top: 6px; }
+  @media (hover: none) { .r-keys { display: none; } }
+  .r-head { position: sticky; top: -20px; z-index: 2; background: #252831; margin: -20px -18px 4px; padding: 20px 18px 10px; border-radius: 44px 44px 0 0; }
+  /* ecran large mais peu haut (portable) : telecommande sur 2 colonnes */
+  @media (min-width: 700px) and (max-height: 1100px) {
+    .remote { max-width: 660px; border-radius: 32px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; align-content: start;
+      grid-template-areas: "head head" "msg msg" "pow rock" "dpad digits" "nav play" "status status" "keys keys"; }
+    .r-head { grid-area: head; border-radius: 32px 32px 0 0; }
+    .r-msg { grid-area: msg; }
+    .r-pow { grid-area: pow; } .dpad { grid-area: dpad; } .r-nav { grid-area: nav; }
+    .r-rock { grid-area: rock; } .r-play { grid-area: play; align-self: start; } .r-digits { grid-area: digits; align-self: start; }
+    .r-status { grid-area: status; } .r-keys { grid-area: keys; }
+    .rb { min-height: 48px; }
+    .dpad { width: 204px; height: 204px; margin: 14px auto 4px; }
+    .r-digits .rb { min-height: 42px; }
+    .r-g2, .r-g3, .r-rock, .r-digits { margin-top: 12px; }
+  }
+  /* ---- minuteurs ---- */
+  .acts { display: flex; align-items: center; gap: 8px; flex: none; }
+  .hdr-acts { display: flex; align-items: center; gap: 8px; }
+  button.tbtn { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 15px; display: inline-grid; place-items: center; color: var(--muted); }
+  button.tbtn:hover { color: var(--text); }
+  button.tbtn.on { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+  .tbar { position: absolute; left: 0; bottom: 0; height: 3px; background: linear-gradient(90deg, var(--warn), var(--accent)); border-radius: 0 3px 3px 0; transition: width 1s linear; pointer-events: none; }
+  .timers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+  .tchip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; border-radius: 999px; font-size: 13px; background: color-mix(in srgb, var(--warn) 14%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--line)); cursor: default; }
+  .tchip .cd { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .tchip .x { width: 24px; height: 24px; padding: 0; border-radius: 50%; font-size: 12px; display: grid; place-items: center; border-color: transparent; background: rgba(255, 255, 255, .08); }
+  .tchip .x:hover { border-color: var(--accent); }
+  .modal-bg { position: fixed; inset: 0; z-index: 70; background: rgba(5, 6, 10, .75); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 20px; box-shadow: 0 30px 80px rgba(0, 0, 0, .6); }
+  .modal .title { font-size: 17px; }
+  .tpick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
+  .tpick button { min-height: 52px; font-size: 16px; font-weight: 600; }
+  .tcustom { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+  .tcustom input { flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font: inherit; }
+  /* ---- historique ---- */
+  .side { position: fixed; inset: 0; z-index: 60; }
+  .side-bg { position: absolute; inset: 0; background: rgba(5, 6, 10, .6); backdrop-filter: blur(4px); }
+  .side-panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 100%); background: var(--panel); border-left: 1px solid var(--line); padding: 18px; overflow-y: auto; box-shadow: -20px 0 60px rgba(0, 0, 0, .5); animation: slidein .2s ease-out; }
+  @keyframes slidein { from { transform: translateX(40px); opacity: 0; } }
+  .h-day { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 600; margin: 18px 0 6px; }
+  .h-item { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 4px 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .h-item .ico { font-size: 16px; text-align: center; line-height: 1.3; }
+  .h-item .txt { overflow-wrap: anywhere; }
+  .h-item .meta { grid-column: 2; display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+  .tag.paris { color: #ffb0ea; border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  .tag.deauville { color: #8fd3ff; border-color: color-mix(in srgb, #38bdf8 50%, var(--line)); }
+  /* ---- favoris ---- */
+  .star { cursor: pointer; opacity: .55; font-size: 14px; line-height: 1; margin-left: 6px; user-select: none; -webkit-user-select: none; transition: .15s; }
+  .star:hover { opacity: 1; transform: scale(1.15); }
+  .star.on { opacity: 1; color: #ffd54a; }
+  .amb .star { position: absolute; top: 8px; right: 8px; margin: 0; font-size: 16px; padding: 6px; opacity: .6; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6)); }
+  .amb .star.on { opacity: 1; }
+  .fav-row .chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 14px; }
+  .fav-row .chip .star { margin-left: 2px; }
+  .fav-row .sub { font-size: 13px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 600px) {
+    .hdr-acts { grid-area: off; gap: 5px; }
+    .hdr-acts button { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 16px; }
+    .side-panel { width: 100%; border-left: 0; padding: 14px 16px; }
+    .tpick { grid-template-columns: repeat(2, 1fr); }
+    header, main { padding-left: 16px; padding-right: 16px; }
+    /* en-tete compact : ligne 1 logo + heure + meteo + ⏻ ; ligne 2 maison + onglets + voyants */
+    header { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand off" "heads status";
+      align-items: center; gap: 8px 10px; padding-top: 12px; padding-bottom: 2px; }
+    .brand { grid-area: brand; flex-wrap: nowrap; gap: 8px; min-width: 0; }
+    .logo { width: 30px; height: 30px; border-radius: 8px; }
+    .clock { font-size: 26px; line-height: 1.1; }
+    .date { font-size: 11px; white-space: nowrap; }
+    .weather { padding-left: 8px; min-width: 0; overflow: hidden; }
+    .w-now { font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+    .w-more { font-size: 11px; line-height: 1.25; }
+    .w-more span { display: block; overflow: hidden; text-overflow: ellipsis; }
+    .w-more .sep { display: none; }
+    .heads { grid-area: heads; gap: 6px; flex-wrap: nowrap; min-width: 0; }
+    .tabs { padding: 3px; border-radius: 12px; gap: 2px; }
+    .tabs button { padding: 0 10px; min-height: 38px; font-size: 13px; }
+    .controls { gap: 8px; }
+    .controls button:not(.icon) { padding: 8px 11px; }
+    .tabs .em { display: none; }
+    .bar.hdr { display: contents; }
+    .bar.hdr .status { grid-area: status; gap: 6px; }
+    .bar.hdr .status { font-size: 11px; }
+    #hdrOff .lbl { display: none; }
+    .tv-vol button:not(.icon) { font-size: 13px; }
+    h2 { margin: 20px 0 10px; }
+    .grid { grid-template-columns: 1fr; }
+    .clock { font-size: 32px; }
+  }
+  /* Ecran "code d'acces" (iHost : appareils du reseau). Jamais affiche en local. */
+  #pinGate { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px;
+    background: var(--bg); background-image: radial-gradient(1200px 600px at 10% -10%, #2a1640 0%, transparent 60%), radial-gradient(900px 500px at 110% 10%, #10233d 0%, transparent 55%); }
+  #pinGate[hidden] { display: none; }
+  .pin-card { width: min(360px, 100%); text-align: center; display: grid; gap: 14px; justify-items: center; }
+  .pin-card .logo { width: 72px; height: 72px; border-radius: 20px; }
+  .pin-card h1 { font-size: 22px; font-weight: 600; margin: 4px 0 0; }
+  .pin-card .sub { margin-top: -8px; }
+  .pin-card form { display: flex; gap: 10px; width: 100%; }
+  .pin-card input { flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 16px; font: inherit; font-size: 24px; letter-spacing: 8px; text-align: center; }
+  .pin-card input:focus { outline: none; border-color: var(--accent); }
+  .pin-card .err { color: var(--warn); font-size: 13px; min-height: 18px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <img class="logo" src="/icon-256.png" alt="" width="36" height="36" onerror="this.hidden=true">
+    <div>
+      <div class="clock" id="clock">--:--</div>
+      <div class="date" id="date"></div>
+    </div>
+    <div class="weather" id="weather" hidden>
+      <div class="w-now" id="wNow"></div>
+      <div class="w-more" id="wMore"></div>
+    </div>
+  </div>
+  <div class="heads">
+    <div class="tabs" id="houseSel" role="group" aria-label="Maison">
+      <button data-h="paris" onclick="setHouse('paris')"><span class="em">🗼 </span>Paris</button>
+      <button data-h="deauville" onclick="setHouse('deauville')"><span class="em">🌊 </span>Deauville</button>
+    </div>
+    <div class="tabs paris-only">
+      <button id="tabHomeBtn" class="on" onclick="showTab('home')"><span class="em">🏠 </span>Maison</button>
+      <button id="tabTvBtn" onclick="showTab('tv')"><span class="em">📺 </span>Télé</button>
+    </div>
+  </div>
+  <div class="bar hdr">
+    <div class="status"><span class="paris-only" title="Hue"><span class="dot" id="dotHue"></span><span class="lbl"> Hue</span></span><span class="deau-only" title="Deauville (Bluetooth)"><span class="dot" id="dotBt"></span><span class="lbl"> Deauville</span></span> <span title="Alexa"><span class="dot" id="dotAlexa"></span><span class="lbl"> Alexa</span></span></div>
+    <div class="hdr-acts">
+      <button id="hdrOff" onclick="headerAllOff()" title="Tout éteindre" aria-label="Tout éteindre">⏻<span class="lbl"> Tout éteindre</span></button>
+      <button id="hdrTimer" class="tbtn" onclick="headerTimer()" title="Tout éteindre dans…" aria-label="Tout éteindre dans…">⏱</button>
+      <button id="hdrHist" class="tbtn" onclick="openHistory()" title="Activité" aria-label="Activité">🕘</button>
+    </div>
+  </div>
+</header>
+
+<main>
+<section id="favSec" hidden>
+  <h2>⭐ Favoris</h2>
+  <div class="chips fav-row" id="favRow" style="margin-top:0"></div>
+</section>
+
+<section id="amb">
+  <h2>Ambiances</h2>
+  <div class="amb-grid" id="ambTiles"><div class="sub">Chargement…</div></div>
+  <div class="timers" id="timersRow" hidden></div>
+</section>
+
+<section id="tab-home">
+  <h2>Pièces</h2>
+  <div class="grid" id="rooms"><div class="card sub">Chargement…</div></div>
+
+  <h2>Musique</h2>
+  <div class="grid" id="players"><div class="card sub">Connexion à Alexa…</div></div>
+
+  <h2>Volume des Alexa</h2>
+  <div class="card" style="margin-bottom:12px"><div class="bar">
+    <span class="sub">« Partout » inclut aussi :</span>
+    <label class="opt"><input type="checkbox" id="optSalon" onchange="saveOpts()"> 📺 Télé du salon (50")</label>
+    <label class="opt"><input type="checkbox" id="optGrande" onchange="saveOpts()"> 📺 Grande télé (75")</label>
+  </div></div>
+  <div class="card"><div class="mini-vols" id="vols"><span class="sub">Connexion à Alexa…</span></div></div>
+
+  <h2>Lancer une musique / faire parler</h2>
+  <div class="card">
+    <div class="bar">
+      <select id="target"></select>
+      <input type="text" id="search" placeholder="ex. du rap sur Spotify, la radio NRJ, Daft Punk…">
+      <button class="primary" onclick="playMusic()">▶ Jouer</button>
+    </div>
+    <div class="bar" style="margin-top:10px">
+      <input type="text" id="speech" placeholder="Texte que l'Alexa va dire…">
+      <button onclick="speak()">🗣 Dire</button>
+    </div>
+  </div>
+</section>
+
+<section id="tab-tv" hidden>
+  <h2>Télés</h2>
+  <div class="grid" id="tvs"><div class="card sub">Chargement…</div></div>
+  <p class="sub" style="margin-top:14px">💡 La 1re fois que tu affiches un texte, la télé demande « Autoriser ? » : accepte avec la télécommande. Le texte s'affiche dans le navigateur de la télé, en plein écran.</p>
+</section>
+
+<section id="tab-deau" hidden>
+  <h2>🔊 Alexa Deauville</h2>
+  <div class="grid" id="deauPlayers"><div class="card sub">Connexion à Alexa…</div></div>
+  <div class="card" id="deauVolsCard" style="margin-top:16px" hidden><div class="mini-vols" id="deauVols"></div></div>
+  <div class="card" style="margin-top:16px">
+    <div class="bar">
+      <select id="deauTarget"></select>
+      <input type="text" id="deauSearch" placeholder="ex. du rap sur Spotify, la radio NRJ, Daft Punk…" onkeydown="event.key==='Enter' && deauPlay()">
+      <button class="primary" onclick="deauPlay()">▶ Jouer</button>
+    </div>
+    <div class="bar" style="margin-top:10px">
+      <input type="text" id="deauSpeech" placeholder="Texte que l'Alexa de Deauville va dire…" onkeydown="event.key==='Enter' && deauSpeak()">
+      <button onclick="deauSpeak()">🗣 Dire</button>
+    </div>
+  </div>
+
+  <h2>Lumières</h2>
+  <div class="card" style="margin-bottom:16px">
+    <div class="row wrap">
+      <div class="grow"><div class="title">💡 Toutes les ampoules</div><div class="sub" id="bulbsSummary">…</div></div>
+      <div class="bar">
+        <button onclick="sendBulb('all',{on:true})">☀ Tout allumer</button>
+        <button onclick="sendBulb('all',{on:false})">⏻ Tout éteindre</button>
+        <button class="tbtn" onclick="pickTimer({type:'bulbs'},'Toutes les ampoules')" title="Éteindre dans…" aria-label="Éteindre dans…">⏱</button>
+      </div>
+    </div>
+    <i class="tbar" data-tk="bulbs" hidden></i>
+  </div>
+  <div class="grid" id="bulbs"><div class="card sub">Chargement…</div></div>
+  <p class="note">ℹ️ Les ampoules Nanoleaf sont pilotées en Bluetooth par le PC : il faut que le PC soit à Deauville, à portée des ampoules. Chaque changement prend environ 4 s par ampoule.</p>
+
+  <h2>Télés &amp; Xbox</h2>
+  <div class="grid" id="deauTvs"><div class="card sub">Chargement…</div></div>
+
+</section>
+</main>
+
+<div id="remote" hidden role="dialog" aria-modal="true" aria-labelledby="remoteName">
+  <div class="remote">
+    <div class="row r-head">
+      <div><div class="title" id="remoteName">Télécommande</div><div class="sub" id="remoteSub"></div></div>
+      <button class="icon" onclick="closeRemote()" aria-label="Fermer">✕</button>
+    </div>
+    <div class="r-msg" id="remoteMsg" hidden></div>
+    <div class="r-g2 r-pow">
+      <button class="rb power" data-b="power" aria-label="Marche / arrêt">⏻</button>
+      <button class="rb" data-b="source">⇄<small>Source</small></button>
+    </div>
+    <div class="dpad">
+      <button class="rb up" data-b="up" aria-label="Haut">▲</button>
+      <button class="rb left" data-b="left" aria-label="Gauche">◀</button>
+      <button class="rb ok" data-b="ok">OK</button>
+      <button class="rb right" data-b="right" aria-label="Droite">▶</button>
+      <button class="rb down" data-b="down" aria-label="Bas">▼</button>
+    </div>
+    <div class="r-g3 r-nav">
+      <button class="rb" data-b="back">↩<small>Retour</small></button>
+      <button class="rb" data-b="home">⌂<small>Accueil</small></button>
+      <button class="rb" data-b="menu">☰<small>Menu</small></button>
+    </div>
+    <div class="r-rock">
+      <div class="rocker">
+        <button class="rb" data-b="volup" aria-label="Volume plus">+</button><span>VOL</span><button class="rb" data-b="voldown" aria-label="Volume moins">−</button>
+      </div>
+      <button class="rb mute" data-b="mute" aria-label="Muet">🔇</button>
+      <div class="rocker">
+        <button class="rb" data-b="chup" aria-label="Chaîne plus">˄</button><span>CH</span><button class="rb" data-b="chdown" aria-label="Chaîne moins">˅</button>
+      </div>
+    </div>
+    <div class="r-g2 r-play">
+      <button class="rb" data-b="play">▶<small>Lecture</small></button>
+      <button class="rb" data-b="pause">⏸<small>Pause</small></button>
+    </div>
+    <div class="r-digits">
+      <button class="rb" data-b="1">1</button><button class="rb" data-b="2">2</button><button class="rb" data-b="3">3</button>
+      <button class="rb" data-b="4">4</button><button class="rb" data-b="5">5</button><button class="rb" data-b="6">6</button>
+      <button class="rb" data-b="7">7</button><button class="rb" data-b="8">8</button><button class="rb" data-b="9">9</button>
+      <button class="rb zero" data-b="0">0</button>
+    </div>
+    <div class="r-status sub" id="remoteStatus"></div>
+    <div class="r-keys">Clavier : flèches · Entrée = OK · ⌫ = retour · + / − volume · M = muet · Échap = fermer</div>
+  </div>
+</div>
+<div id="timerPick" class="modal-bg" hidden role="dialog" aria-modal="true" aria-labelledby="tpTitle">
+  <div class="modal">
+    <div class="row"><div><div class="title" id="tpTitle">⏱ Éteindre dans…</div><div class="sub" id="tpSub"></div></div><button class="icon" onclick="closeTimerPick()" aria-label="Fermer">✕</button></div>
+    <div class="tpick">
+      <button onclick="confirmTimer(15)">15 min</button>
+      <button onclick="confirmTimer(30)">30 min</button>
+      <button onclick="confirmTimer(60)">1 h</button>
+      <button onclick="confirmTimer(90)">1 h 30</button>
+    </div>
+    <div class="tcustom">
+      <input type="number" id="tpCustom" min="1" max="1440" inputmode="numeric" placeholder="Autre durée (minutes)" onkeydown="event.key==='Enter' && confirmTimer()">
+      <button class="primary" onclick="confirmTimer()">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="hist" class="side" hidden role="dialog" aria-modal="true" aria-labelledby="histTitle">
+  <div class="side-bg" onclick="closeHistory()"></div>
+  <aside class="side-panel">
+    <div class="row"><div><div class="title" id="histTitle">🕘 Activité</div><div class="sub">Dernières actions, toutes maisons</div></div><button class="icon" onclick="closeHistory()" aria-label="Fermer">✕</button></div>
+    <div id="histList"><div class="sub" style="margin-top:14px">Chargement…</div></div>
+  </aside>
+</div>
+<div id="toast"></div>
+
+<div id="pinGate" hidden>
+  <div class="pin-card">
+    <img class="logo" src="/icon-256.png" alt="" onerror="this.hidden=true">
+    <h1>Code d'accès</h1>
+    <div class="sub">Cet appareil n'est pas encore autorisé</div>
+    <form id="pinForm" autocomplete="off">
+      <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••" aria-label="Code d'accès" autofocus>
+      <button type="submit" class="primary">Entrer</button>
+    </form>
+    <div class="err" id="pinErr"></div>
+  </div>
+</div>
+
+<script>
+// ---------- code d'acces (iHost : appareils du reseau ; jamais en local) ----------
+(() => {
+  const gate = document.getElementById('pinGate');
+  const show = () => { if (gate.hidden) { gate.hidden = false; setTimeout(() => document.getElementById('pinInput').focus(), 50); } };
+  // Un 401 sur /api/* = jeton absent ou expire : on affiche l'ecran "code" sans casser le reste
+  const realFetch = window.fetch.bind(window);
+  window.fetch = async (url, opts) => {
+    const r = await realFetch(url, opts);
+    if (r.status === 401 && /^\/api\//.test(String(typeof url === 'string' ? url : url && url.url || ''))) show();
+    return r;
+  };
+  realFetch('/api/login-required', { cache: 'no-store' }).then(r => r.json()).then(j => { if (j && j.required) show(); }).catch(() => {});
+  document.getElementById('pinForm').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const input = document.getElementById('pinInput'), err = document.getElementById('pinErr');
+    const pin = input.value.trim();
+    if (!/^\d{4,6}$/.test(pin)) { err.textContent = 'Le code fait 4 à 6 chiffres'; return; }
+    err.textContent = '';
+    try {
+      const r = await realFetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) { location.reload(); return; }
+      if (r.status === 429) err.textContent = `Trop d'essais : réessaie dans ${Math.ceil((j.retryAfter || 600) / 60)} min`;
+      else if (j.error === 'pin-not-set') err.textContent = 'Aucun code configuré (variable MAISON_PIN)';
+      else err.textContent = j.remaining != null ? `Code incorrect (${j.remaining} essai${j.remaining > 1 ? 's' : ''} restant${j.remaining > 1 ? 's' : ''})` : 'Code incorrect';
+      input.value = ''; input.focus();
+    } catch (e) { err.textContent = 'Serveur injoignable'; }
+  });
+})();
+
+let state = { hue: [], alexa: { ready: false } };
+let busyUntil = 0;              // pas de re-rendu pendant qu'on manipule un curseur
+const markBusy = () => busyUntil = Date.now() + 1500;
+
+// ---------- utilitaires ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2500); }
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { toast('Erreur : ' + (j.error || r.status)); throw new Error(j.error); }
+  return j;
+}
+function throttle(fn, ms) {
+  let last = 0, timer = null, args;
+  return (...a) => { args = a; const now = Date.now(); const run = () => { last = Date.now(); timer = null; fn(...args); };
+    if (now - last >= ms) run(); else if (!timer) timer = setTimeout(run, ms - (now - last)); };
+}
+
+// Couleurs Hue (CIE xy) <-> RGB
+function xyToHex(xy, bri = 100) {
+  if (!xy) return '#ffd9a0';
+  const z = 1 - xy.x - xy.y, Y = 1, X = (Y / xy.y) * xy.x, Z = (Y / xy.y) * z;
+  let r = X * 1.656492 - Y * 0.354851 - Z * 0.255038, g = -X * 0.707196 + Y * 1.655397 + Z * 0.036152, b = X * 0.051713 - Y * 0.121364 + Z * 1.01153;
+  const m = Math.max(r, g, b); [r, g, b] = [r, g, b].map(v => Math.max(0, v / m)).map(v => v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+  return '#' + [r, g, b].map(v => Math.round(Math.min(1, v) * 255).toString(16).padStart(2, '0')).join('');
+}
+function mirekToHex(m) { const k = 1e6 / m; const t = Math.min(1, Math.max(0, (k - 2000) / 4500)); const lerp = (a, b) => Math.round(a + (b - a) * t);
+  return '#' + [lerp(255, 220), lerp(170, 232), lerp(90, 255)].map(v => v.toString(16).padStart(2, '0')).join(''); }
+function hexToXy(hex) {
+  const c = [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16) / 255).map(v => v > 0.04045 ? Math.pow((v + 0.055) / 1.055, 2.4) : v / 12.92);
+  const X = c[0] * 0.4124 + c[1] * 0.3576 + c[2] * 0.1805, Y = c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722, Z = c[0] * 0.0193 + c[1] * 0.1192 + c[2] * 0.9505;
+  const s = X + Y + Z || 1; return { x: +(X / s).toFixed(4), y: +(Y / s).toFixed(4) };
+}
+const lightHex = l => l.mirek ? mirekToHex(l.mirek) : xyToHex(l.xy);
+
+// ---------- pieces ----------
+const setGroup = throttle((id, body) => api('/api/group', { id, ...body }), 150);
+const setLight = throttle((id, body) => api('/api/light', { id, ...body }), 150);
+
+function renderRooms() {
+  if (!state.hue || !state.hue.length) {
+    setHtml($('rooms'), state.hueError
+      ? `<div class="card warn"><div class="row"><span class="big-ico">⚠️</span><div class="grow"><div class="title">Pont Hue : ${esc(state.hueError)}</div><div class="sub">Vérifie que le pont Hue est branché et sur le même réseau que le PC. Les pièces reviendront toutes seules.</div></div></div></div>`
+      : '<div class="card sub">Aucune pièce Hue.</div>');
+    return;
+  }
+  setHtml($('rooms'), state.hue.map(r => {
+    const lit = r.lights.filter(l => l.on && l.reachable);
+    const glow = lit.length ? lightHex(lit[0]) : '';
+    return `
+    <div class="card ${r.on ? 'lit' : ''}" style="${glow ? '--glow:' + glow : ''}">
+      <div class="row">
+        <div><div class="title">${esc(r.name)}</div>
+          <div class="sub">${r.on ? `Allumée · ${Math.round(r.brightness)} %` : 'Éteinte'} · ${r.lights.length} lumière${r.lights.length > 1 ? 's' : ''}</div></div>
+        <div class="acts">${timerBtn({ type: 'hueRoom', name: r.name }, r.name)}<label class="switch"><input type="checkbox" ${r.on ? 'checked' : ''} onchange="markBusy(); api('/api/group',{id:'${r.groupId}',on:this.checked})"><span></span></label></div>
+      </div>
+      ${r.lights.length ? `<div class="slider"><span>☀</span>
+        <input type="range" min="1" max="100" value="${Math.round(r.brightness) || 1}" oninput="markBusy(); this.nextElementSibling.textContent=this.value+' %'; setGroup('${r.groupId}',{brightness:+this.value})">
+        <span class="val">${Math.round(r.brightness)} %</span></div>` : ''}
+      ${r.scenes.length ? `<div class="chips">${r.scenes.map(s => `<span class="chip ${s.active ? 'active' : ''}" onclick="api('/api/scene',{id:'${s.id}'}); toast('Scène : ${esc(s.name).replace(/'/g, "\\'")}')">${esc(s.name)}${starBtn({ type: 'scene', id: s.id, name: s.name, room: r.name })}</span>`).join('')}</div>` : ''}
+      ${r.lights.length ? `<details ${openRooms.has(r.id) ? 'open' : ''} ontoggle="this.open ? openRooms.add('${r.id}') : openRooms.delete('${r.id}')"><summary>Lumières</summary>
+        ${r.lights.map(l => `
+        <div class="light ${l.reachable ? '' : 'off-net'}" title="${l.reachable ? '' : 'Injoignable (interrupteur coupé ?)'}">
+          <label class="swatch" style="background:${l.on ? lightHex(l) : '#2a2f3a'}"><input type="color" value="${lightHex(l)}" oninput="markBusy(); this.parentNode.style.background=this.value; setLight('${l.id}',{xy:hexToXy(this.value)})"></label>
+          <div><div class="name">${esc(l.name)}${l.reachable ? '' : ' <span class="tag">injoignable</span>'}</div>
+            <input type="range" min="1" max="100" value="${Math.round(l.brightness) || 1}" oninput="markBusy(); setLight('${l.id}',{brightness:+this.value})"></div>
+          <label class="switch"><input type="checkbox" ${l.on ? 'checked' : ''} onchange="markBusy(); api('/api/light',{id:'${l.id}',on:this.checked})"><span></span></label>
+        </div>`).join('')}
+      </details>` : ''}
+      ${timerBar({ type: 'hueRoom', name: r.name })}
+    </div>`;
+  }).join(''));
+  renderFavs();
+}
+const openRooms = new Set();
+function allOff() { state.hue.forEach(r => api('/api/group', { id: r.groupId, on: false })); toast('Tout est éteint'); }
+
+// ---------- Alexa ----------
+// Options : ajouter les teles quand on agit sur le groupe "Partout"
+let tvs = [];
+const opts = (() => { try { return JSON.parse(localStorage.getItem('tvOpts')) || {}; } catch (e) { return {}; } })();
+function saveOpts() {
+  opts.salon = $('optSalon').checked; opts.grande = $('optGrande').checked;
+  try { localStorage.setItem('tvOpts', JSON.stringify(opts)); } catch (e) {}
+}
+function withTvs(serial) {
+  const d = state.alexa.devices && state.alexa.devices.find(x => x.serial === serial);
+  if (!d || d.name !== 'Partout') return [serial];
+  return [serial, ...tvs.filter(t => opts[t.key]).map(t => t.serial)];
+}
+const lastPartout = {};
+const sendVolume = throttle((serial, v) => {
+  api('/api/alexa/volume', { serial, volume: v });
+  const extra = withTvs(serial).slice(1);
+  if (!extra.length) return;
+  const prev = lastPartout[serial] != null ? lastPartout[serial] : v;
+  lastPartout[serial] = v;
+  const steps = Math.round((v - prev) / 2);   // 1 cran tele pour 2 points de curseur
+  if (steps) tvs.filter(t => extra.includes(t.serial)).forEach(t => api('/api/tv/volume', { key: t.key, steps }));
+}, 150);
+let alexaBusyUntil = 0;   // apres un reglage de volume, on n'ecrase pas les curseurs pendant 4 s
+function onVolume(el, serial) {
+  if (lastPartout[serial] == null) { const d0 = state.alexa.devices.find(x => x.serial === serial); if (d0 && d0.volume != null) lastPartout[serial] = d0.volume; }
+  alexaBusyUntil = Date.now() + 4000; markBusy();
+  el.nextElementSibling.textContent = el.value;
+  const d = state.alexa.devices && state.alexa.devices.find(x => x.serial === serial);
+  if (d) d.volume = +el.value;
+  sendVolume(serial, +el.value);
+}
+function media(serial, action) { Promise.all(withTvs(serial).map(s => api('/api/alexa/media', { serial: s, action }))).then(() => toast('OK')); }
+// Alexa renvoie progress/length en secondes (on tolere aussi des millisecondes : > 20000 = ms)
+const toSec = v => { v = +v || 0; return v > 20000 ? v / 1000 : v; };
+function fmt(v) { const s = Math.max(0, Math.round(toSec(v))); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+
+const devHouse = d => d.house === 'deauville' ? 'deauville' : 'paris';
+// Lecteurs : ce qui joue, sinon les groupes, sinon tous les appareils
+function pickShown(devs) {
+  const playing = devs.filter(d => d.player);
+  if (playing.length) return playing;
+  const groups = devs.filter(d => d.group);
+  return groups.length ? groups : devs;
+}
+function renderAlexa() {
+  const a = state.alexa;
+  $('dotAlexa').classList.toggle('on', !!a.ready);
+  if (!a.ready) { const m = `<div class="card sub">${a.error ? 'Alexa : ' + esc(a.error) : 'Connexion à Alexa…'}</div>`; setHtml($('players'), m); setHtml($('deauPlayers'), m); return; }
+  const paris = a.devices.filter(d => devHouse(d) === 'paris');
+  const deauDevs = a.devices.filter(d => devHouse(d) === 'deauville');
+
+  setHtml($('players'), pickShown(paris).map(playerCard).join('') || '<div class="card sub">Aucune Alexa à Paris.</div>');
+  setHtml($('vols'), paris.map(volRow).join(''));
+  setHtml($('deauPlayers'), pickShown(deauDevs).map(playerCard).join('') || '<div class="card sub">Aucune Alexa à Deauville pour l\'instant.</div>');
+  $('deauVolsCard').hidden = deauDevs.length < 2;
+  const dsel = $('deauTarget'), dcur = dsel.value;
+  setHtml(dsel, deauDevs.filter(d => d.online).map(d => `<option value="${d.serial}">${esc(d.name)}${d.group ? ' (groupe)' : ''}</option>`).join('') || '<option value="">Aucune Alexa en ligne</option>');
+  if (dcur) dsel.value = dcur;
+  setHtml($('deauVols'), deauDevs.length > 1 ? deauDevs.map(volRow).join('') : '');
+
+  const sel = $('target'), cur = sel.value;
+  setHtml(sel, paris.filter(d => d.online).map(d => `<option value="${d.serial}">${esc(d.name)}${d.group ? ' (groupe)' : ''}</option>`).join(''));
+  if (cur) sel.value = cur; else { const ch = paris.find(d => d.name === 'Chambre'); if (ch) sel.value = ch.serial; }
+}
+function playerCard(d) {
+    const p = d.player;
+    const len = p ? toSec(p.length) : 0, pos = p ? Math.min(len, toSec(p.progress)) : 0;
+    const pct = len ? Math.min(100, (pos / len) * 100) : 0;
+    return `
+    <div class="card ${d.online ? '' : 'offline'}">
+      <div class="player">
+        <div class="art" style="${p && p.art ? `background-image:url('${esc(p.art)}')` : ''}">${p && p.art ? '' : '♪'}</div>
+        <div class="track">
+          <div class="row"><span class="sub">${esc(d.name)}</span>${p && p.provider ? `<span class="tag">${esc(p.provider)}</span>` : ''}</div>
+          <div class="t">${p ? esc(p.title) : 'Rien en lecture'}</div>
+          <div class="a">${p ? esc(p.artist) : (d.group ? esc(d.members.join(', ')) : '')}</div>
+          ${p && p.length ? `<div class="progress"><i style="width:${pct}%"></i></div><div class="sub" style="font-size:11px;margin-top:4px">${fmt(pos)} / ${fmt(len)}</div>` : ''}
+        </div>
+      </div>
+      <div class="controls">
+        <button class="icon" onclick="media('${d.serial}','previous')">⏮</button>
+        ${p && p.state === 'PLAYING'
+          ? `<button class="icon big primary" onclick="media('${d.serial}','pause')">⏸</button>`
+          : `<button class="icon big primary" onclick="media('${d.serial}','play')">▶</button>`}
+        <button class="icon" onclick="media('${d.serial}','next')">⏭</button>
+        ${timerBtn({ type: 'alexaStop', device: d.name }, d.name)}
+      </div>
+      ${d.volume != null ? `<div class="slider"><span>🔊</span>
+        <input type="range" min="0" max="100" value="${d.volume}" oninput="onVolume(this,'${d.serial}')" onchange="sendVolume('${d.serial}',+this.value)">
+        <span class="val">${d.volume}</span></div>` : ''}
+      ${timerBar({ type: 'alexaStop', device: d.name })}
+    </div>`;
+}
+// Curseur de volume individuel
+function volRow(d) {
+  return `
+    <div class="slider ${d.online ? '' : 'offline'}">
+      <span class="n">${esc(d.name)}${d.group ? ' <span class="tag">groupe</span>' : ''}${d.online ? '' : ' <span class="tag">hors ligne</span>'}</span>
+      ${d.volume != null ? `<input type="range" min="0" max="100" value="${d.volume}" oninput="onVolume(this,'${d.serial}')" onchange="sendVolume('${d.serial}',+this.value)">
+      <span class="val">${d.volume}</span>` : '<span class="sub">volume non disponible</span>'}
+    </div>`;
+}
+
+function playMusic() { const s = $('search').value.trim(); if (!s) return; Promise.all(withTvs($('target').value).map(x => api('/api/alexa/music', { serial: x, search: s }))).then(() => toast('Lecture demandée : ' + s)); }
+function deauPlay() { const s = $('deauSearch').value.trim(), serial = $('deauTarget').value; if (!s) return; if (!serial) return toast('Aucune Alexa de Deauville en ligne'); api('/api/alexa/music', { serial, search: s }).then(() => toast('Lecture demandée : ' + s)); }
+function deauSpeak() { const t = $('deauSpeech').value.trim(), serial = $('deauTarget').value; if (!t) return; if (!serial) return toast('Aucune Alexa de Deauville en ligne'); api('/api/alexa/speak', { serial, text: t }).then(() => { toast('Message envoyé'); $('deauSpeech').value = ''; }); }
+function speak() { const t = $('speech').value.trim(); if (!t) return; api('/api/alexa/speak', { serial: $('target').value, text: t }).then(() => { toast('Message envoyé'); $('speech').value = ''; }); }
+$('search').addEventListener('keydown', e => e.key === 'Enter' && playMusic());
+$('speech').addEventListener('keydown', e => e.key === 'Enter' && speak());
+
+// ---------- chargement + temps reel ----------
+// ---------- Teles ----------
+const tvDraft = {};   // ce qui est tape, garde entre deux rafraichissements
+function showTab(name) {
+  $('tab-home').hidden = name !== 'home'; $('tab-tv').hidden = name !== 'tv';
+  $('tabHomeBtn').classList.toggle('on', name === 'home'); $('tabTvBtn').classList.toggle('on', name === 'tv');
+  try { localStorage.setItem('tab', name); } catch (e) {}
+  if (name === 'tv') loadTvs();
+}
+async function loadTvs() { try { tvs = await api('/api/tv'); if (Date.now() >= busyUntil) renderTvs(); } catch (e) {} }
+function renderTvs() {
+  setHtml($('tvs'), tvs.map(t => {
+    const d = tvDraft[t.key] || {};
+    return `
+    <div class="card ${t.on ? 'lit' : ''}">
+      <div class="row">
+        <div><div class="title">📺 ${esc(t.name)} <span class="sub">${esc(t.size)}</span></div>
+          <div class="sub">${t.alexaOnline ? 'Alexa connectée' : 'Alexa hors ligne'}${t.paired ? ' · texte à l\'écran autorisé' : ''}</div></div>
+        <div class="acts">${timerBtn({ type: 'tvOff', key: t.key }, t.name)}<span class="tv-state ${t.on ? 'on' : ''}">${t.on === undefined ? '…' : t.on ? '● Allumée' : '○ Veille'}</span></div>
+      </div>
+      <div class="tv-pow">
+        <button onclick="tvPower('${t.key}', true)">⏻ Allumer</button>
+        <button onclick="tvPower('${t.key}', false)">⏼ Éteindre</button>
+        <button class="span2 primary" onclick="openRemote('${t.key}')">🎮 Télécommande</button>
+      </div>
+      <div class="tv-vol">
+        <button onclick="tvVol('${t.key}', -5)">🔉 −5</button>
+        <button class="icon" aria-label="Volume −1" onclick="tvVol('${t.key}', -1)">−</button>
+        <button onclick="tvMute('${t.key}')">🔇 Muet</button>
+        <button class="icon" aria-label="Volume +1" onclick="tvVol('${t.key}', 1)">+</button>
+        <button onclick="tvVol('${t.key}', 5)">🔊 +5</button>
+      </div>
+      <div class="tv-preview ${d.text ? '' : 'empty'}" id="prev-${t.key}" style="color:${esc(d.color || '#ffffff')}">${d.text ? esc(d.text) : 'Aperçu du texte à l\'écran'}</div>
+      <div class="stack">
+        <div class="bar">
+          <input type="text" id="txt-${t.key}" value="${esc(d.text || '')}" placeholder="Texte au milieu de l'écran…" oninput="markBusy(); draft('${t.key}')" onkeydown="event.key==='Enter' && tvText('${t.key}')">
+          <input type="color" id="col-${t.key}" value="${esc(d.color || '#ffffff')}" oninput="draft('${t.key}')">
+        </div>
+        <div class="bar">
+          <button class="primary" onclick="tvText('${t.key}')">🖥 Afficher</button>
+          <button onclick="tvText('${t.key}', true)">🖥🗣 Afficher + dire</button>
+          <button onclick="tvClear('${t.key}')">✖ Effacer l'écran</button>
+        </div>
+        <div class="bar">
+          <input type="text" id="say-${t.key}" placeholder="Faire parler la télé…" onkeydown="event.key==='Enter' && tvSpeak('${t.key}')">
+          <button onclick="tvSpeak('${t.key}')">🗣 Dire</button>
+        </div>
+      </div>
+      ${timerBar({ type: 'tvOff', key: t.key })}
+    </div>`;
+  }).join(''));
+}
+function draft(key) {
+  const text = $('txt-' + key).value, color = $('col-' + key).value;
+  tvDraft[key] = { text, color };
+  const p = $('prev-' + key); p.textContent = text || 'Aperçu du texte à l\'écran'; p.classList.toggle('empty', !text); p.style.color = color;
+}
+function tvPower(key, on) { api('/api/tv/power', { key, on }).then(() => { toast(on ? 'Allumage…' : 'Extinction…'); setTimeout(loadTvs, 3000); }); }
+function tvVol(key, steps) { toast('Volume télé… (accepte « Autoriser » sur la télé si demandé)'); api('/api/tv/volume', { key, steps }).then(() => toast(`Volume télé ${steps > 0 ? '+' : ''}${steps}`)); }
+function tvMute(key) { api('/api/tv/mute', { key }).then(() => toast('Muet / son')); }
+function tvText(key, alsoSay) {
+  const text = $('txt-' + key).value.trim(); if (!text) return;
+  toast('Envoi à la télé… (accepte « Autoriser » sur l\'écran si demandé)');
+  api('/api/tv/text', { key, text, color: $('col-' + key).value }).then(() => { toast('Affiché à l\'écran'); loadTvs(); });
+  if (alsoSay) api('/api/tv/speak', { key, text });
+}
+function tvClear(key) { api('/api/tv/clear', { key }).then(() => toast('Écran effacé')); }
+function tvSpeak(key) { const el = $('say-' + key), text = el.value.trim(); if (!text) return; api('/api/tv/speak', { key, text }).then(() => { toast('La télé parle'); el.value = ''; }); }
+
+function render(force) { if (!force && Date.now() < busyUntil) return; renderRooms(); renderAlexa(); }
+async function load() {
+  try { state = await api('/api/state'); $('dotHue').classList.toggle('on', !state.hueError); render(true); }
+  catch (e) { $('dotHue').classList.remove('on'); }
+}
+const es = new EventSource('/api/events');
+es.onmessage = e => { const d = JSON.parse(e.data); if (d.hue) { state.hue = d.hue; if ('hueError' in d) state.hueError = d.hueError; $('dotHue').classList.toggle('on', !state.hueError); if (Date.now() >= busyUntil) renderRooms(); } };
+async function loadAlexa() { if (Date.now() < alexaBusyUntil) return; try { state.alexa = await api('/api/alexa'); if (Date.now() >= busyUntil) renderAlexa(); } catch (e) {} }
+setInterval(loadAlexa, 5000);
+
+// ---------- requetes "silencieuses" (pas de toast, statut HTTP disponible) ----------
+async function req(path, body) {
+  try {
+    const r = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data: data || {} };
+  } catch (e) { return { ok: false, status: 0, data: { error: 'serveur injoignable' } }; }
+}
+const cap = s => s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : '';
+const jsArg = v => esc(JSON.stringify(v));   // valeur JS sure dans un attribut onclick="..."
+const setHtml = (el, html) => { if (el._html !== html) { el.innerHTML = html; el._html = html; if (typeof tickTimers === 'function') tickTimers(); } };
+
+// ---------- Maison : Paris / Deauville ----------
+let house = 'paris';
+try { if (localStorage.getItem('house') === 'deauville') house = 'deauville'; } catch (e) {}
+let parisTab = 'home';
+try { if (localStorage.getItem('tab') === 'tv') parisTab = 'tv'; } catch (e) {}
+function setHouse(h) {
+  house = h === 'deauville' ? 'deauville' : 'paris';
+  try { localStorage.setItem('house', house); } catch (e) {}
+  document.body.dataset.house = house;
+  document.querySelectorAll('#houseSel button').forEach(b => b.classList.toggle('on', b.dataset.h === house));
+  if (house === 'paris') { $('tab-deau').hidden = true; showTab(parisTab); load(); }
+  else { $('tab-home').hidden = $('tab-tv').hidden = true; $('tab-deau').hidden = false; loadDeau(true); }
+  renderWeather(); loadAmbiances(); loadAlexa(); renderTimers();
+}
+
+// ---------- Meteo ----------
+let weather = null;
+const WMO = c => c == null ? '' : c === 0 ? '☀️' : c <= 2 ? '🌤' : c === 3 ? '☁️' : c <= 48 ? '🌫' : c <= 57 ? '🌦' : c <= 67 ? '🌧' : c <= 77 ? '🌨' : c <= 82 ? '🌧' : c <= 86 ? '🌨' : '⛈';
+const hhmm = v => { if (!v) return ''; if (/^\d{1,2}:\d{2}$/.test(String(v))) return String(v); const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); };
+const deg = v => v == null || isNaN(+v) ? '' : Math.round(+v) + '°';
+async function loadWeather() { const r = await req('/api/weather'); weather = r.ok ? r.data : null; renderWeather(); }
+function renderWeather() {
+  const w = weather && weather[house];
+  if (!w || w.temp == null) { $('weather').hidden = true; return; }
+  const icon = w.icon && String(w.icon).length <= 4 ? w.icon : WMO(w.code);
+  $('wNow').textContent = [icon, deg(w.temp), w.label].filter(Boolean).join(' ');
+  const hl = [w.high != null && 'max ' + deg(w.high), w.low != null && 'min ' + deg(w.low)].filter(Boolean).join(' / ');
+  const sun = w.sunrise || w.sunset ? `☀ ${hhmm(w.sunrise)} → ${hhmm(w.sunset)}` : '';
+  $('wMore').innerHTML = [hl, sun].filter(Boolean).map(esc).map((t, i) => `<span>${i ? '<i class="sep"> · </i>' : ''}${t}</span>`).join('');
+  $('weather').hidden = false;
+}
+
+// ---------- Ambiances ----------
+let ambs = [], ambsHouse = null, ambsErr = null, ambRun = null;   // ambRun = { id, name, house, total, step }
+const ambKind = a => { const s = (a.id + ' ' + a.name).toLowerCase(); return /gam|jeu/.test(s) ? 'gaming' : /dodo|nuit|sleep/.test(s) ? 'dodo' : /sort|part|away/.test(s) ? 'sortie' : /matin|morning|réveil|reveil/.test(s) ? 'matin' : ''; };
+const ambTotal = a => Array.isArray(a.steps) ? a.steps.length : +a.steps || 0;
+async function loadAmbiances() {
+  const h = house, r = await req('/api/ambiances?house=' + encodeURIComponent(h));
+  if (h !== house) return;
+  ambsHouse = h; ambs = r.ok && Array.isArray(r.data) ? r.data : [];
+  ambsErr = r.ok ? null : r.status === 404 ? 'config' : (r.data.error || 'HTTP ' + r.status);
+  renderAmbiances();
+}
+function renderAmbiances() {
+  renderFavs();
+  const el = $('ambTiles');
+  if (ambsErr) { setHtml(el, `<div class="sub">${ambsErr === 'config' ? '⚙️ Ambiances : en cours de configuration…' : '⚠️ Ambiances indisponibles (' + esc(ambsErr) + ')'}</div>`); return; }
+  if (!ambs.length) { setHtml(el, '<div class="sub">Aucune ambiance pour cette maison.</div>'); return; }
+  setHtml(el, ambs.map(a => {
+    const run = ambRun && ambRun.id === a.id && ambRun.house === house;
+    const total = ambTotal(a);
+    const step = run && ambRun.step != null ? (typeof ambRun.step === 'number' ? `étape ${Math.max(1, ambRun.step)}${total ? '/' + total : ''}` : esc(ambRun.step)) : '';
+    return `<button class="amb ${ambKind(a)} ${run ? 'running' : ''}" ${ambRun ? 'disabled' : ''} onclick="runAmbiance(${jsArg(a.id)})">
+      <span class="e">${esc(a.emoji || '✨')}</span><span class="n">${esc(a.name)}</span>
+      <span class="p">${run ? `<span class="spin"></span>en cours…${step ? ' ' + step : ''}` : total ? `${total} étape${total > 1 ? 's' : ''}` : ''}</span>
+      ${starBtn({ type: 'amb', id: a.id, name: a.name, emoji: a.emoji })}</button>`;
+  }).join(''));
+}
+async function runAmbiance(id) {
+  if (ambRun) return;
+  const a = ambs.find(x => x.id === id); if (!a) return;
+  ambRun = { id, name: a.name, house, step: null };
+  renderAmbiances();
+  const r = await req('/api/ambiance/run', { id, house });
+  if (!r.ok) {
+    ambRun = null; renderAmbiances();
+    return toast(r.status === 404 ? 'Ambiances : en cours de configuration' : 'Erreur : ' + (r.data.error || r.status));
+  }
+  for (let i = 0; i < 180; i++) {   // 3 min max
+    await new Promise(res => setTimeout(res, 1000));
+    const s = await req('/api/ambiance/status');
+    if (!s.ok) continue;
+    ambRun.step = s.data.step; renderAmbiances();
+    if (!s.data.running) {
+      const name = ambRun.name; ambRun = null; renderAmbiances();
+      toast(s.data.error ? `Ambiance ${name} : ${s.data.error}` : `Ambiance ${name} activée`);
+      if (house === 'deauville') loadDeau(); else load();
+      return;
+    }
+  }
+  ambRun = null; renderAmbiances(); toast('Ambiance : pas de réponse du serveur');
+}
+function headerAllOff() {
+  if (house === 'paris') allOff();
+  else { sendBulb('all', { on: false }); toast('Extinction des ampoules de Deauville…'); }
+}
+
+// ---------- Deauville ----------
+let deau = null, deauErr = null, deauBusyUntil = 0, deauDrag = false;
+const bulbPending = {};   // modifications optimistes en attente : id -> { patch, until }
+const deauBusy = (ms = 1500) => { deauBusyUntil = Date.now() + ms; };
+document.addEventListener('pointerup', () => { if (deauDrag) { deauDrag = false; deauBusy(); } });
+document.addEventListener('pointercancel', () => { if (deauDrag) { deauDrag = false; deauBusy(); } });
+
+function hexToHs(hex) {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16) / 255);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d) { h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; if (h < 0) h += 360; }
+  return { hue: Math.round(h) % 360, saturation: Math.round(mx ? (d / mx) * 100 : 0) };
+}
+function hsvHex(h, s, v = 100) {
+  s /= 100; v /= 100;
+  const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return '#' + [f(5), f(3), f(1)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+}
+const bulbWhite = b => !(b.saturation > 5 && b.hue != null);
+const bulbHex = b => !bulbWhite(b) ? hsvHex(b.hue, b.saturation) : b.kelvin ? mirekToHex(1e6 / b.kelvin) : '#ffd9a0';
+function effBulb(b) {
+  const p = bulbPending[b.id];
+  if (!p) return b;
+  if (Date.now() < p.until || b.busy) return { ...b, ...p.patch, _pending: true };
+  delete bulbPending[b.id]; return b;
+}
+
+async function loadDeau(force) {
+  const r = await req('/api/deauville');
+  if (r.ok && r.data && typeof r.data === 'object') { deau = r.data; deauErr = null; }
+  else { deauErr = r.status === 404 ? 'config' : (r.data.error || 'HTTP ' + r.status); if (r.status === 404) deau = null; }
+  $('dotBt').classList.toggle('on', !!deau && !deauErr);
+  renderBulbs(force); renderDeauDevices();
+}
+const cfgCard = what => `<div class="card cfg">⚙️ ${what} : en cours de configuration…</div>`;
+
+function renderBulbs(force) {
+  if (!force && (deauDrag || Date.now() < deauBusyUntil)) return;
+  const el = $('bulbs');
+  if (!deau) { setHtml(el, deauErr && deauErr !== 'config' ? `<div class="card cfg">⚠️ Deauville injoignable (${esc(deauErr)})</div>` : cfgCard('Ampoules de Deauville')); $('bulbsSummary').textContent = '—'; return; }
+  const bulbs = (deau.bulbs || []).map(effBulb);
+  if (!bulbs.length) { setHtml(el, '<div class="card sub">Aucune ampoule trouvée.</div>'); $('bulbsSummary').textContent = 'Aucune ampoule'; return; }
+  const on = bulbs.filter(b => b.on && b.reachable !== false).length, away = bulbs.filter(b => b.reachable === false).length;
+  const sumTxt = `${on} allumée${on > 1 ? 's' : ''} sur ${bulbs.length}${away ? ` · ${away} hors de portée` : ''}${deauErr ? ' · ⚠️ ' + deauErr : ''}`;
+  if ($('bulbsSummary').textContent !== sumTxt) $('bulbsSummary').textContent = sumTxt;
+  setHtml(el, bulbs.map(b => {
+    const hex = bulbHex(b), off = b.reachable === false, working = b.busy || b._pending;
+    const bri = Math.round(b.brightness ?? 0) || 1, id = jsArg(b.id), white = bulbWhite(b);
+    const status = off ? '<span class="tag warn">hors de portée</span>'
+      : (b.on == null ? 'État inconnu' : b.on ? `Allumée · ${bri} %` : 'Éteinte') + (working ? ' · <span class="spin"></span>en cours…' : '');
+    const preset = (k, label) => `<span class="chip ${white && b.kelvin && Math.abs(b.kelvin - k) < 200 ? 'active' : ''}" onclick="sendBulb(${id},{kelvin:${k}})">${label}</span>`;
+    return `
+    <div class="card ${b.on && !off ? 'lit' : ''} ${off ? 'offline' : ''}" style="--glow:${hex}">
+      <div class="row">
+        <div class="grow"><div class="title">💡 ${esc(b.name || b.id)}</div><div class="sub">${status}</div></div>
+        <label class="switch"><input type="checkbox" ${b.on ? 'checked' : ''} onchange="sendBulb(${id},{on:this.checked})"><span></span></label>
+      </div>
+      <div class="slider"><span>☀</span>
+        <input type="range" min="1" max="100" value="${bri}" onpointerdown="deauDrag=true" oninput="deauBusy(); this.nextElementSibling.textContent=this.value+' %'" onchange="sendBulb(${id},{brightness:+this.value})">
+        <span class="val">${b.brightness == null ? '—' : bri + ' %'}</span></div>
+      <div class="chips" style="align-items:center">
+        <label class="swatch" title="Couleur" style="background:${hex}"><input type="color" value="${hex}" onclick="deauBusy(60000)" oninput="deauBusy(60000); this.parentNode.style.background=this.value" onchange="sendBulb(${id},hexToHs(this.value))"></label>
+        ${preset(2700, '🕯 Chaud')}${preset(4000, '☁ Neutre')}${preset(6500, '❄ Froid')}
+      </div>
+      ${b.updatedAt ? `<div class="sub" style="font-size:11px;margin-top:10px">Mis à jour ${esc(new Date(b.updatedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }))}</div>` : ''}
+    </div>`;
+  }).join(''));
+}
+
+async function sendBulb(id, patch) {
+  const bulbs = (deau && deau.bulbs) || [];
+  const targets = id === 'all' ? bulbs : bulbs.filter(b => b.id === id);
+  const until = Date.now() + 2500 + 4000 * Math.max(1, targets.length);
+  const optimistic = patch.kelvin ? { ...patch, saturation: 0 } : patch;
+  targets.forEach(b => {
+    const prev = bulbPending[b.id];
+    bulbPending[b.id] = { patch: { ...(prev && Date.now() < prev.until ? prev.patch : {}), ...optimistic }, until };
+  });
+  renderBulbs(true);
+  const r = await req('/api/deauville/bulb', { id, ...patch });
+  if (!r.ok) {
+    targets.forEach(b => delete bulbPending[b.id]);
+    toast(r.status === 404 ? 'Deauville : en cours de configuration' : 'Erreur : ' + (r.data.error || r.status));
+    renderBulbs(true);
+  } else setTimeout(() => loadDeau(), 800);
+}
+
+function renderDeauDevices() {
+  const el = $('deauTvs');
+  if (!deau) { setHtml(el, cfgCard('Télés et Xbox de Deauville')); return; }
+  const tvCards = (deau.tvs || []).map(t => {
+    const st = t.reachable === false ? '<span class="tv-state">○ Hors ligne</span>' : t.on ? '<span class="tv-state on">● Allumée</span>' : '<span class="tv-state">○ Veille</span>';
+    const tags = [t.brand && `<span class="tag">${esc(cap(t.brand))}</span>`, t.ip && `<span class="tag">${esc(t.ip)}</span>`,
+      t.needsPsk && '<span class="tag warn">clé PSK requise</span>', t.paired && '<span class="tag ok">appairée</span>'].filter(Boolean).join(' ');
+    return `
+    <div class="card ${t.on && t.reachable !== false ? 'lit' : ''} ${t.reachable === false ? 'offline' : ''}">
+      <div class="row"><div class="grow"><div class="title">📺 ${esc(t.name || t.key)}</div><div class="tags">${tags}</div></div><div class="acts">${timerBtn({ type: 'tvOff', key: t.key }, t.name || t.key)}${st}</div></div>
+      <div class="controls"><button class="primary" onclick="openRemote(${jsArg(t.key)})">🎮 Télécommande</button></div>
+      ${timerBar({ type: 'tvOff', key: t.key })}
+    </div>`;
+  }).join('');
+  const x = deau.xbox;
+  const xbox = x ? `
+    <div class="card xbox ${x.reachable ? 'lit' : ''}" style="--glow:#107c10">
+      <div class="row"><div class="grow"><div class="title">🎮 Xbox</div><div class="tags">${x.ip ? `<span class="tag">${esc(x.ip)}</span>` : ''}</div></div>
+        <div class="acts">${timerBtn({ type: 'xbox', action: 'off' }, 'Xbox')}<span class="tv-state ${x.reachable ? 'on' : ''}">${x.reachable ? '● En ligne' : '○ Hors ligne'}</span></div></div>
+      <div class="controls">
+        <button class="primary xb-big" onclick="xboxCmd('on')">⏻ Allumer</button>
+        <button class="xb-big" onclick="xboxCmd('off')">⏼ Éteindre</button>
+      </div>
+      <div class="controls">
+        <button class="icon" title="Pause" aria-label="Pause" onclick="xboxCmd('pause')">⏸</button>
+        <button class="icon" title="Lecture" aria-label="Lecture" onclick="xboxCmd('play')">▶</button>
+        <button class="icon" title="Accueil" aria-label="Accueil" onclick="xboxCmd('home')">🏠</button>
+        <button class="icon" title="Volume −" aria-label="Volume moins" onclick="xboxCmd('voldown')">🔉</button>
+        <button class="icon" title="Volume +" aria-label="Volume plus" onclick="xboxCmd('volup')">🔊</button>
+        <button class="icon" title="Capture d'écran" aria-label="Capture d'écran" onclick="xboxCmd('screenshot')">📸</button>
+      </div>
+      <div class="bar" style="margin-top:14px">
+        <input type="text" id="xboxGame" value="${esc(xboxDraft)}" placeholder="Lancer un jeu…" oninput="xboxDraft=this.value" onkeydown="event.key==='Enter' && xboxLaunch()">
+        <button onclick="xboxLaunch()">🚀 Lancer</button>
+      </div>
+      <div class="chips">${XBOX_GAMES.map(g => `<span class="chip" onclick="xboxLaunch(${jsArg(g)})">${esc(g)}</span>`).join('')}</div>
+      <p class="note" style="margin-bottom:0">Commandes via Alexa (skill Xbox à activer dans l'appli Alexa).</p>
+      ${timerBar({ type: 'xbox', action: 'off' })}
+    </div>` : '';
+  setHtml(el, tvCards + xbox || '<div class="card sub">Aucune télé trouvée.</div>');
+}
+// ---------- Xbox (via l'Echo de Deauville + skill Alexa Xbox) ----------
+const XBOX_GAMES = ['Fortnite', 'Minecraft', 'EA FC', 'Rocket League', 'Forza'];   // raccourcis "Lancer un jeu"
+let xboxDraft = '';   // texte tape, conserve entre deux rafraichissements
+const XBOX_LABELS = { on: 'Allumage', off: 'Extinction', pause: 'Pause', play: 'Lecture', home: 'Accueil', volup: 'Volume +', voldown: 'Volume −', screenshot: "Capture d'écran", launch: 'Lancement' };
+async function xboxCmd(action, game) {
+  const body = game ? { action, game } : { action };
+  toast((XBOX_LABELS[action] || action) + (game ? ' : ' + game : '') + '…');
+  const r = await req('/api/xbox', body);
+  if (!r.ok) return toast(r.status === 404 ? 'Xbox : en cours de configuration' : 'Xbox : ' + (r.data.error || r.data.message || 'erreur ' + r.status));
+  toast(r.data.sent ? '🗣 « ' + r.data.sent + ' »' : 'Commande Xbox envoyée');
+}
+function xboxLaunch(game) {
+  const g = (game || ($('xboxGame') ? $('xboxGame').value : '') || '').trim();
+  if (!g) { toast('Indique le nom du jeu'); return; }
+  if (!game) { xboxDraft = ''; if ($('xboxGame')) $('xboxGame').value = ''; }
+  xboxCmd('launch', g);
+}
+
+// ---------- Telecommande ----------
+const BTN_LABELS = { power: 'Marche/arrêt', up: 'Haut', down: 'Bas', left: 'Gauche', right: 'Droite', ok: 'OK', back: 'Retour', home: 'Accueil',
+  menu: 'Menu', volup: 'Volume +', voldown: 'Volume −', mute: 'Muet', chup: 'Chaîne +', chdown: 'Chaîne −', play: 'Lecture', pause: 'Pause', source: 'Source' };
+const PSK_HINT = 'La télé Sony demande une clé pré-partagée (PSK) : active-la sur la télé (Réseau › Contrôle IP › Authentification « Normale et clé pré-partagée ») puis renseigne la même clé côté serveur.';
+let remote = null;
+function tvMeta(key) {
+  return (deau && (deau.tvs || []).find(t => t.key === key)) || tvs.find(t => t.key === key) || { key, name: key };
+}
+function remoteMsg(lines) { const m = $('remoteMsg'); const txt = lines.filter(Boolean).join('\n'); m.textContent = txt; m.hidden = !txt; }
+function remoteButtons() { return [...document.querySelectorAll('#remote [data-b]')]; }
+const TV_NAMES = { salon: 'Télé du salon', grande: 'Grande télé', sony: 'Sony', samsung43: 'Samsung 43"' };
+async function openRemote(key) {
+  let t = tvMeta(key);
+  if (!t.name || t.name === key) t = { ...t, name: TV_NAMES[key] || key };
+  const brand = String(t.brand || (key === 'sony' ? 'sony' : key === 'samsung43' ? 'samsung' : '')).toLowerCase();
+  remote = { key, brand, paired: t.paired, info: null };
+  $('remoteName').textContent = '🎮 ' + (t.name || key);
+  $('remoteSub').textContent = [cap(t.brand), t.ip].filter(Boolean).join(' · ') || 'Télécommande';
+  $('remoteStatus').textContent = '';
+  remoteButtons().forEach(b => b.disabled = true);
+  remoteMsg(['Connexion à la télé…']);
+  $('remote').hidden = false; document.body.classList.add('noscroll');
+  const r = await req('/api/tv/remote-info?key=' + encodeURIComponent(key));
+  if (!remote || remote.key !== key) return;
+  if (!r.ok) { remoteMsg([r.status === 404 ? '⚙️ Télécommande en cours de configuration…' : '⚠️ ' + (r.data.error || 'Erreur ' + r.status)]); return; }
+  const info = remote.info = r.data;
+  const avail = Array.isArray(info.buttons) ? new Set(info.buttons.map(String)) : null;
+  remoteButtons().forEach(b => b.disabled = !!avail && !avail.has(b.dataset.b));
+  remoteMsg([
+    info.reachable === false && '⚠️ Télé injoignable sur le réseau (éteinte, en veille profonde ou hors Wi-Fi ?).',
+    info.needsPsk && (info.hint || PSK_HINT),
+    brand.includes('samsung') && !remote.paired && 'Première utilisation : accepte « Autoriser » sur la télé.',
+    !info.needsPsk && info.hint,
+  ]);
+}
+function closeRemote() { remote = null; $('remote').hidden = true; document.body.classList.remove('noscroll'); }
+async function rpress(btn) {
+  if (!remote) return;
+  const el = document.querySelector(`#remote [data-b="${btn}"]`);
+  if (!el || el.disabled) return;
+  el.classList.add('pressed'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('pressed'), 150);
+  try { navigator.vibrate && navigator.vibrate(12); } catch (e) {}
+  const key = remote.key, label = BTN_LABELS[btn] || btn;
+  $('remoteStatus').textContent = '→ ' + label;
+  const r = await req('/api/tv/remote', { key, button: btn });
+  if (!remote || remote.key !== key) return;
+  if (r.ok) { $('remoteStatus').textContent = '✓ ' + label; if (remote.brand.includes('samsung')) remote.paired = true; return; }
+  if (r.status === 409 && r.data.error === 'psk') { remoteMsg([r.data.hint || PSK_HINT]); $('remoteStatus').textContent = '✗ clé PSK requise'; return; }
+  $('remoteStatus').textContent = r.status === 404 ? '⚙️ en cours de configuration' : '✗ ' + (r.data.error || 'erreur ' + r.status);
+  if (r.data.hint) remoteMsg([r.data.hint]);
+}
+$('remote').addEventListener('click', e => {
+  if (e.target === $('remote')) return closeRemote();
+  const b = e.target.closest('[data-b]'); if (b) rpress(b.dataset.b);
+});
+document.addEventListener('keydown', e => {
+  if ($('remote').hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+  const map = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'ok', Backspace: 'back',
+    '+': 'volup', '=': 'volup', '-': 'voldown', m: 'mute', M: 'mute' };
+  if (e.key === 'Escape') { e.preventDefault(); return closeRemote(); }
+  const btn = map[e.key] || (/^[0-9]$/.test(e.key) ? e.key : null);
+  if (!btn) return;
+  e.preventDefault(); if (!e.repeat || /^(vol|up|down|left|right)/.test(btn)) rpress(btn);
+});
+
+// ---------- Minuteurs "éteins dans…" ----------
+let timers = [], timersErr = null, tpick = null;   // tpick = { target, label } pendant le choix de la durée
+const tkey = t => !t ? '' : t.type === 'hueRoom' ? 'hueRoom:' + t.name : t.type === 'alexaStop' ? 'alexaStop:' + t.device : t.type === 'tvOff' ? 'tvOff:' + t.key : String(t.type);
+const timerBtn = (target, label) => `<button class="tbtn" data-tb="${esc(tkey(target))}" onclick="pickTimer(${jsArg(target)},${jsArg(label)})" title="Éteindre dans…" aria-label="Éteindre dans…">⏱</button>`;
+const timerBar = target => `<i class="tbar" data-tk="${esc(tkey(target))}" hidden></i>`;
+const timerLabel = t => t.label || (t.target && ({ hueRoom: t.target.name, bulbs: 'Toutes les ampoules', alexaStop: t.target.device, tvOff: TV_NAMES[t.target.key] || t.target.key, xbox: 'Xbox', hueAll: 'Toutes les lumières' })[t.target.type]) || 'Minuteur';
+const timerHere = t => !t.house || t.house === house;
+const byEnd = (a, b) => new Date(a.endsAt) - new Date(b.endsAt);
+const cdFmt = endsAt => { const s = Math.max(0, Math.round((new Date(endsAt) - Date.now()) / 1000)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s % 60).padStart(2, '0'); };
+async function loadTimers() {
+  const r = await req('/api/timers');
+  if (r.ok && Array.isArray(r.data)) { timers = r.data; timersErr = null; }
+  else timersErr = r.status === 404 ? 'config' : (r.data.error || 'HTTP ' + r.status);
+  renderTimers();
+}
+function renderTimers() {
+  const el = $('timersRow'), list = timers.slice().sort(byEnd);
+  if (!list.length) {
+    el.hidden = !timersErr;
+    setHtml(el, !timersErr ? '' : timersErr === 'config' ? '<span class="sub">⚙️ Minuteurs : en cours de configuration…</span>' : `<span class="sub">⚠️ Minuteurs indisponibles (${esc(timersErr)})</span>`);
+    return;
+  }
+  el.hidden = false;
+  setHtml(el, list.map(t => `<span class="tchip" title="Fin à ${esc(hhmm(t.endsAt))}">⏱ ${esc(timerLabel(t))}${timerHere(t) ? '' : ` <span class="tag ${esc(t.house)}">${esc(cap(t.house))}</span>`} · <b class="cd" data-id="${esc(t.id)}"></b><button class="x" onclick="cancelTimer(${jsArg(t.id)})" title="Annuler" aria-label="Annuler le minuteur">✕</button></span>`).join(''));
+  tickTimers();
+}
+function tickTimers() {
+  const now = Date.now(), before = timers.length;
+  timers = timers.filter(t => new Date(t.endsAt) - now > -2000);
+  if (timers.length !== before) { renderTimers(); setTimeout(loadTimers, 2500); return; }
+  document.querySelectorAll('.tchip .cd').forEach(el => { const t = timers.find(x => String(x.id) === el.dataset.id); const txt = t ? cdFmt(t.endsAt) : ''; if (el.textContent !== txt) el.textContent = txt; });
+  document.querySelectorAll('[data-tk]').forEach(el => {
+    const t = timers.filter(x => timerHere(x) && tkey(x.target) === el.dataset.tk).sort(byEnd)[0];
+    el.hidden = !t;
+    if (!t) return;
+    const end = new Date(t.endsAt).getTime(), start = t.createdAt ? new Date(t.createdAt).getTime() : end - 60000;
+    el.style.width = Math.max(0, Math.min(100, (end - now) / Math.max(1, end - start) * 100)) + '%';
+    el.title = 'Extinction dans ' + cdFmt(t.endsAt);
+  });
+  $('hdrTimer').dataset.tb = house === 'paris' ? 'hueAll' : 'bulbs';
+  document.querySelectorAll('[data-tb]').forEach(b => b.classList.toggle('on', timers.some(x => timerHere(x) && tkey(x.target) === b.dataset.tb)));
+}
+function pickTimer(target, label) {
+  tpick = { target, label: label || timerLabel({ target }) };
+  $('tpSub').textContent = tpick.label; $('tpCustom').value = '';
+  $('timerPick').hidden = false;
+}
+function closeTimerPick() { tpick = null; $('timerPick').hidden = true; }
+async function confirmTimer(min) {
+  if (!tpick) return;
+  const minutes = min || Math.round(+$('tpCustom').value);
+  if (!minutes || minutes < 1 || minutes > 1440) { toast('Indique une durée entre 1 et 1440 minutes'); $('tpCustom').focus(); return; }
+  const { target, label } = tpick; closeTimerPick();
+  const r = await req('/api/timers', { house, target, minutes, label });
+  if (!r.ok) return toast(r.status === 404 ? 'Minuteurs : en cours de configuration' : 'Erreur : ' + (r.data.error || r.status));
+  const endsAt = r.data.endsAt || new Date(Date.now() + minutes * 60000).toISOString();
+  timers = timers.filter(t => t.id !== r.data.id).concat([{ id: r.data.id, label, house, target, endsAt, createdAt: new Date().toISOString() }]);
+  renderTimers();
+  toast(`⏱ ${label} : extinction dans ${minutes} min`);
+  setTimeout(loadTimers, 1500);
+}
+async function cancelTimer(id) {
+  const t = timers.find(x => x.id === id);
+  timers = timers.filter(x => x.id !== id); renderTimers();
+  const r = await req('/api/timers/cancel', { id });
+  if (!r.ok) { toast(r.status === 404 ? 'Minuteurs : en cours de configuration' : 'Erreur : ' + (r.data.error || r.status)); return loadTimers(); }
+  toast(`Minuteur ${t ? timerLabel(t) + ' ' : ''}annulé`);
+}
+function headerTimer() { house === 'paris' ? pickTimer({ type: 'hueAll' }, 'Toutes les lumières') : pickTimer({ type: 'bulbs' }, 'Toutes les ampoules'); }
+$('timerPick').addEventListener('click', e => { if (e.target === $('timerPick')) closeTimerPick(); });
+setInterval(tickTimers, 1000); setInterval(loadTimers, 10000); loadTimers();
+
+// ---------- Historique ----------
+let histTimer = null;
+const srcIcon = s => /phone|mobile|tel|tél|ios|android|iphone/i.test(s || '') ? '📱' : '💻';
+function relTime(at) {
+  const d = (Date.now() - new Date(at)) / 1000;
+  if (isNaN(d)) return '';
+  if (d < 45) return "à l'instant";
+  if (d < 3600) return `il y a ${Math.max(1, Math.round(d / 60))} min`;
+  if (d < 86400) { const h = Math.floor(d / 3600), m = Math.round(d % 3600 / 60); return `il y a ${h} h${m && h < 6 ? ' ' + String(m).padStart(2, '0') : ''}`; }
+  const j = Math.floor(d / 86400); return `il y a ${j} jour${j > 1 ? 's' : ''}`;
+}
+function dayLabel(at) {
+  const d = new Date(at), t = new Date(); if (isNaN(d)) return 'Date inconnue';
+  if (d.toDateString() === t.toDateString()) return "Aujourd'hui";
+  t.setDate(t.getDate() - 1); if (d.toDateString() === t.toDateString()) return 'Hier';
+  return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+async function loadHistory() {
+  const r = await req('/api/history?limit=50'), el = $('histList');
+  if (!r.ok) { setHtml(el, `<div class="sub" style="margin-top:14px">${r.status === 404 ? '⚙️ Historique : en cours de configuration…' : '⚠️ Historique indisponible (' + esc(r.data.error || 'HTTP ' + r.status) + ')'}</div>`); return; }
+  const items = (Array.isArray(r.data) ? r.data : []).slice().sort((a, b) => new Date(b.at) - new Date(a.at));
+  if (!items.length) return setHtml(el, '<div class="sub" style="margin-top:14px">Aucune activité pour l\'instant.</div>');
+  let html = '', day = null;
+  for (const it of items) {
+    const dl = dayLabel(it.at);
+    if (dl !== day) { day = dl; html += `<div class="h-day">${esc(dl)}</div>`; }
+    html += `<div class="h-item"><span class="ico" title="${esc(it.source || '')}">${srcIcon(it.source)}</span><div class="txt">${esc(it.text)}</div>
+      <div class="meta"><span title="${esc(new Date(it.at).toLocaleString('fr-FR'))}">${esc(relTime(it.at))} · ${esc(hhmm(it.at))}</span>${it.house ? `<span class="tag ${esc(it.house)}">${esc(cap(it.house))}</span>` : ''}</div></div>`;
+  }
+  setHtml(el, html);
+}
+function openHistory() { $('hist').hidden = false; document.body.classList.add('noscroll'); loadHistory(); clearInterval(histTimer); histTimer = setInterval(loadHistory, 15000); }
+function closeHistory() { $('hist').hidden = true; document.body.classList.remove('noscroll'); clearInterval(histTimer); histTimer = null; }
+document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (!$('timerPick').hidden) closeTimerPick(); else if (!$('hist').hidden) closeHistory(); });
+
+// ---------- Favoris (localStorage, par maison) ----------
+const favs = (() => { try { const f = JSON.parse(localStorage.getItem('favs')); return f && typeof f === 'object' ? f : {}; } catch (e) { return {}; } })();
+const favKey = f => f.type + ':' + f.id;
+const favList = () => Array.isArray(favs[house]) ? favs[house] : [];
+const isFav = f => favList().some(x => favKey(x) === favKey(f));
+function saveFavs() { try { localStorage.setItem('favs', JSON.stringify(favs)); } catch (e) {} }
+const starBtn = f => { const on = isFav(f); return `<span class="star ${on ? 'on' : ''}" role="button" tabindex="0" title="${on ? 'Retirer des favoris' : 'Ajouter aux favoris'}" aria-label="Favori" aria-pressed="${on}" onclick="event.stopPropagation(); toggleFav(${jsArg(f)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();toggleFav(${jsArg(f)})}">${on ? '★' : '☆'}</span>`; };
+function toggleFav(f) {
+  const k = favKey(f), list = favList();
+  favs[house] = list.some(x => favKey(x) === k) ? list.filter(x => favKey(x) !== k) : list.concat([f]);
+  saveFavs(); toast(isFav(f) ? `⭐ ${f.name} ajouté aux favoris` : `${f.name} retiré des favoris`);
+  if (f.type === 'scene') renderRooms(); else renderAmbiances();
+  renderFavs();
+}
+function renderFavs() {
+  const list = favList(), sec = $('favSec');
+  sec.hidden = !list.length;
+  if (!list.length) return setHtml($('favRow'), '');
+  setHtml($('favRow'), list.map(f => {
+    if (f.type === 'amb') {
+      const a = ambs.find(x => x.id === f.id), run = ambRun && ambRun.id === f.id && ambRun.house === house;
+      return `<span class="chip ${run ? 'active' : ''}" onclick="runAmbiance(${jsArg(f.id)})">${esc((a && a.emoji) || f.emoji || '✨')} ${esc((a && a.name) || f.name)}${run ? ' <span class="spin"></span>' : ''}${starBtn(f)}</span>`;
+    }
+    const room = (state.hue || []).find(r => r.name === f.room), sc = room && room.scenes.find(s => s.id === f.id);
+    return `<span class="chip ${sc && sc.active ? 'active' : ''}" onclick="api('/api/scene',{id:${jsArg(f.id)}}); toast(${jsArg('Scène : ' + f.name)})">🎬 ${esc(f.room)} · ${esc((sc && sc.name) || f.name)}${starBtn(f)}</span>`;
+  }).join(''));
+}
+
+function tick() {
+  const n = new Date();
+  $('clock').textContent = n.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  $('date').textContent = n.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+tick(); setInterval(tick, 10000);
+$('optSalon').checked = !!opts.salon; $('optGrande').checked = !!opts.grande;
+// Paris : la liste des teles ne se rafraichit que sur l'onglet Tele (cache en mode Deauville)
+loadTvs(); setInterval(() => { if (house === 'paris' && !$('tab-tv').hidden) loadTvs(); }, 10000);
+// Deauville : etat des ampoules / teles / Xbox toutes les 3 s, seulement en mode Deauville
+setInterval(() => { if (house === 'deauville' && !document.hidden) loadDeau(); }, 3000);
+setHouse(house);
+loadWeather(); setInterval(loadWeather, 15 * 60 * 1000);
+</script>
+</body>
+</html>

@@ -74,10 +74,13 @@ function wakeOnLan(mac) {
     const hex = mac.replace(/[^0-9a-f]/gi, '');
     const pkt = Buffer.from('ff'.repeat(6) + hex.repeat(16), 'hex');
     const s = dgram.createSocket('udp4');
+    const close = () => { try { s.close(); } catch (e) { /* deja ferme */ } };
+    s.on('error', close);
     s.bind(() => {
-        s.setBroadcast(true);
-        s.send(pkt, 9, '255.255.255.255', () => s.send(pkt, 9, '192.168.1.255', () => s.close()));
+        try { s.setBroadcast(true); } catch (e) { /* pas de broadcast */ }
+        s.send(pkt, 9, '255.255.255.255', () => s.send(pkt, 9, '192.168.1.255', close));
     });
+    setTimeout(close, 3000);
 }
 
 function config() {
@@ -96,23 +99,48 @@ function pskError() {
 
 // ---------- Sony BRAVIA ----------
 const psk = () => String(config().sonyPsk || '').trim();
-let sonyPskRejected = null;   // la cle refusee (on reessaie si elle change)
+let sonyPskRejected = null, sonyPskRejectedAt = 0;   // la cle refusee (on reessaie si elle change, ou apres 1 min)
+const REJECT_MS = 60000;
+const pskBad = k => !k || (k === sonyPskRejected && Date.now() - sonyPskRejectedAt < REJECT_MS);
+const rejectPsk = k => { if (k) { sonyPskRejected = k; sonyPskRejectedAt = Date.now(); } };
 
 async function sonyApi(service, method, params = [], needAuth = false) {
     const k = psk();
-    if (needAuth && (!k || k === sonyPskRejected)) throw pskError();
+    if (needAuth && pskBad(k)) throw pskError();
     const body = JSON.stringify({ method, id: 1, params, version: '1.0' });
     const r = await httpReq({ host: SONY.ip, path: `/sony/${service}`, method: 'POST',
         headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), ...(k ? { 'X-Auth-PSK': k } : {}) } }, body);
     let j = {};
     try { j = JSON.parse(r.body); } catch (e) { /* vide */ }
     if (r.status === 403 || r.status === 401 || (j.error && (j.error[0] === 403 || j.error[0] === 401))) {
-        if (k) sonyPskRejected = k;
+        rejectPsk(k);
         throw pskError();
     }
     if (j.error) throw new Error(`Sony : ${j.error[1] || j.error[0]}`);
     if (needAuth) sonyPskRejected = null;
     return j.result;
+}
+
+// Adresse MAC de la Sony (Wake-on-LAN quand elle est completement eteinte) : deauville-config.json "sonyMac",
+// sinon apprise via getSystemInformation des que la tele repond, puis memorisee dans le fichier.
+let sonyMacMem = null, sonyWolChecked = false;
+const sonyMac = () => String(config().sonyMac || sonyMacMem || '').trim() || null;
+async function sonyLearnMac() {
+    if (sonyMac()) return;
+    const r = await sonyApi('system', 'getSystemInformation');
+    const mac = r && r[0] && r[0].macAddr;
+    if (!mac || !/^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i.test(mac)) return;
+    sonyMacMem = mac;
+    try { const c = config(); if (!c.sonyMac) appConfig.writeJson(CFG_FILE, { ...c, sonyMac: mac }); } catch (e) { /* lecture seule */ }
+}
+// Reveil reseau de la tele : actif s'il faut (une seule tentative par demarrage, cle PSK requise)
+async function sonyEnsureWol() {
+    if (sonyWolChecked || pskBad(psk())) return;
+    sonyWolChecked = true;
+    try {
+        const r = await sonyApi('system', 'getWolMode');
+        if (r && r[0] && r[0].enabled === false) await sonyApi('system', 'setWolMode', [{ enabled: true }], true);
+    } catch (e) { /* ancienne tele / refus : tant pis */ }
 }
 
 let sonyCodes = null;   // nom IRCC -> code
@@ -125,7 +153,7 @@ async function sonyLoadCodes() {
 
 async function sonyIrcc(name) {
     const k = psk();
-    if (!k || k === sonyPskRejected) throw pskError();
+    if (pskBad(k)) throw pskError();
     const codes = await sonyLoadCodes();
     const code = codes[name];
     if (!code) throw new Error(`Touche Sony inconnue : ${name}`);
@@ -134,24 +162,65 @@ async function sonyIrcc(name) {
     const r = await httpReq({ host: SONY.ip, path: '/sony/IRCC', method: 'POST', headers: {
         'content-type': 'text/xml; charset=UTF-8', SOAPACTION: '"urn:schemas-sony-com:service:IRCC:1#X_SendIRCC"',
         'X-Auth-PSK': k, 'content-length': Buffer.byteLength(body) } }, body);
-    if (r.status === 403 || r.status === 401) { sonyPskRejected = k; throw pskError(); }
+    if (r.status === 403 || r.status === 401) { rejectPsk(k); throw pskError(); }
     if (r.status !== 200) throw new Error(`Sony IRCC : HTTP ${r.status}`);
     sonyPskRejected = null;
 }
 
-// Renvoie le nouvel etat (true = allumee)
-async function sonyPowerToggle() {
-    const st = await sonyApi('system', 'getPowerStatus');
-    const on = st && st[0] && st[0].status === 'active';
-    await sonyApi('system', 'setPowerStatus', [{ status: !on }], true);
-    return !on;
+// Etat d'alimentation : true/false, ou null si la tele ne repond pas du tout (eteinte sans veille reseau)
+async function sonyIsOn() {
+    try {
+        const st = await sonyApi('system', 'getPowerStatus');
+        return !!(st && st[0] && st[0].status === 'active');
+    } catch (e) {
+        if (e.status === 409) throw e;
+        return null;
+    }
+}
+
+// Allumer : setPowerStatus si la tele repond, sinon Wake-on-LAN (adresse MAC connue)
+async function sonyPowerOn() {
+    try { await sonyApi('system', 'setPowerStatus', [{ status: true }], true); }
+    catch (e) {
+        if (e.status === 409) throw e;
+        const mac = sonyMac();
+        if (!mac) throw new Error('Télé hors de portée (adresse MAC inconnue pour le réveil réseau)');
+        wakeOnLan(mac);
+    }
 }
 
 // Mise en veille (minuteurs) : ne fait rien si la tele est deja eteinte
 async function sonyPowerOff() {
-    const st = await sonyApi('system', 'getPowerStatus');
-    if (st && st[0] && st[0].status !== 'active') return;
+    const on = await sonyIsOn();
+    if (!on) return;
     await sonyApi('system', 'setPowerStatus', [{ status: false }], true);
+}
+
+async function sonySetPower(on) {
+    if (on) await sonyPowerOn(); else await sonyPowerOff();
+    return on;
+}
+
+// Renvoie le nouvel etat (true = allumee)
+async function sonyPowerToggle() {
+    const on = await sonyIsOn();   // null (injoignable) = eteinte
+    return sonySetPower(!on);
+}
+
+// Volume absolu 0-100 (enceinte de la tele)
+async function sonySetVolume(v) {
+    const vol = Math.max(0, Math.min(100, Math.round(+v)));
+    if (!Number.isFinite(vol)) throw new Error('Volume 0–100 attendu');
+    await sonyApi('audio', 'setAudioVolume', [{ target: 'speaker', volume: String(vol) }], true);
+    return vol;
+}
+
+// { volume, mute } de l'enceinte, ou null
+async function sonyVolumeInfo() {
+    const r = await sonyApi('audio', 'getVolumeInformation');
+    const list = (r && r[0]) || [];
+    const spk = list.find(x => x.target === 'speaker') || list[0];
+    return spk ? { volume: +spk.volume, mute: !!spk.mute } : null;
 }
 
 // ---------- Nanoleaf (une operation Bluetooth a la fois) ----------
@@ -252,8 +321,28 @@ function busy(id) {
 
 // ---------- etat des teles / Xbox (rafraichi en arriere-plan) ----------
 function create({ samsungTv, tvKey, tvTokens }) {
-    const cache = { sony: { reachable: null, on: null }, samsung: { reachable: null, on: null }, xbox: null };
-    let lastClient = 0, probing = false, lastProbe = 0;
+    const cache = { sony: { reachable: null, on: null, volume: null, mute: null }, samsung: { reachable: null, on: null }, xbox: null };
+    // Etat demande recemment (allumage/extinction) : on l'affiche tel quel PENDING_MS, le temps que l'appareil suive
+    const pending = { sony: { on: null, at: 0 }, samsung: { on: null, at: 0 }, xbox: { on: null, at: 0 } };
+    const PENDING_MS = 20000;
+    let lastClient = 0, probing = false, probeAgain = false, lastProbe = 0;
+    const reprobeTimers = [];
+
+    const applyPending = (key, probed) => (Date.now() - pending[key].at < PENDING_MS && pending[key].on !== null) ? pending[key].on : probed;
+
+    function setPending(key, on) {
+        if (!pending[key]) return;
+        pending[key] = { on: !!on, at: Date.now() };
+        if (cache[key] && typeof cache[key] === 'object') cache[key].on = !!on;
+        else if (key === 'xbox') cache.xbox = !!on;
+        reprobeSoon();
+    }
+
+    // Nouvelle sonde a +3 s et +8 s (apres une action) pour que l'etat suive vite
+    function reprobeSoon(delays = [3000, 8000]) {
+        while (reprobeTimers.length) clearTimeout(reprobeTimers.pop());
+        delays.forEach(ms => reprobeTimers.push(setTimeout(() => refresh(true), ms)));
+    }
 
     async function samsungInfo(tv) {
         const r = await httpReq({ host: tv.ip, port: 8001, path: '/api/v2/' }, null, 2000);
@@ -262,27 +351,46 @@ function create({ samsungTv, tvKey, tvTokens }) {
         return d;
     }
 
-    async function refresh() {
-        if (probing) return;
+    async function probeSony() {
+        try {
+            const r = await sonyApi('system', 'getPowerStatus');
+            const on = !!(r && r[0] && r[0].status === 'active');
+            let vol = null;
+            if (on) { try { vol = await sonyVolumeInfo(); } catch (e) { /* pas de volume */ } }
+            cache.sony = { reachable: true, on: applyPending('sony', on), volume: vol ? vol.volume : null, mute: vol ? vol.mute : null };
+            sonyLearnMac().catch(() => {});
+            sonyEnsureWol().catch(() => {});
+        } catch (e) {
+            cache.sony = { reachable: false, on: applyPending('sony', null), volume: null, mute: null };
+        }
+    }
+
+    async function refresh(force) {
+        if (probing) { if (force) probeAgain = true; return; }
         probing = true;
-        lastProbe = Date.now();
-        const tv = samsungTv();
-        await Promise.all([
-            sonyApi('system', 'getPowerStatus')
-                .then(r => { cache.sony = { reachable: true, on: !!(r && r[0] && r[0].status === 'active') }; })
-                .catch(() => { cache.sony = { reachable: false, on: null }; }),
-            samsungInfo(tv)
-                .then(d => { cache.samsung = { reachable: true, on: d.PowerState ? d.PowerState === 'on' : true }; })
-                .catch(() => { cache.samsung = { reachable: false, on: null }; }),
-            ping(XBOX.ip).then(ok => { cache.xbox = ok; }),
-        ]);
-        probing = false;
+        try {
+            do {
+                probeAgain = false;
+                lastProbe = Date.now();
+                const tv = samsungTv();
+                await Promise.all([
+                    probeSony(),
+                    samsungInfo(tv)
+                        .then(d => { cache.samsung = { reachable: true, on: applyPending('samsung', d.PowerState ? d.PowerState === 'on' : true) }; })
+                        .catch(() => { cache.samsung = { reachable: false, on: applyPending('samsung', null) }; }),
+                    ping(XBOX.ip).then(ok => { cache.xbox = applyPending('xbox', ok); }).catch(() => {}),
+                ]);
+            } while (probeAgain);
+        } catch (e) { /* jamais bloquant */ }
+        finally { probing = false; }
     }
 
     setInterval(() => {
-        if (Date.now() - lastClient > 120000) return;
-        if (Date.now() - lastProbe > 10000) refresh();
-        if (Date.now() - nlLastState >= 60000) nlEnqueue('all', 'state');
+        try {
+            if (Date.now() - lastClient > 120000) return;
+            if (Date.now() - lastProbe > 10000) refresh();
+            if (Date.now() - nlLastState >= 60000) nlEnqueue('all', 'state');
+        } catch (e) { /* jamais bloquant */ }
     }, 5000);
 
     function state() {
@@ -291,11 +399,12 @@ function create({ samsungTv, tvKey, tvTokens }) {
         if (Date.now() - nlLastState >= 60000) nlEnqueue('all', 'state');
         const tv = samsungTv();
         const k = psk();
+        const needsPsk = pskBad(k);
         return {
             bulbs: BULBS.map(b => ({ ...bulbs[b.id], busy: busy(b.id) })),
             tvs: [
-                { key: SONY.key, name: SONY.name, brand: 'sony', ip: SONY.ip, ...cache.sony, paired: !!k && k !== sonyPskRejected, needsPsk: !k || k === sonyPskRejected },
-                { key: tv.key, name: tv.name, brand: 'samsung', ip: tv.ip, ...cache.samsung, paired: !!tvTokens()[tv.key], needsPsk: false },
+                { key: SONY.key, name: SONY.name, brand: 'sony', ip: SONY.ip, ...cache.sony, paired: !needsPsk, needsPsk, mac: sonyMac() },
+                { key: tv.key, name: tv.name, brand: 'samsung', ip: tv.ip, ...cache.samsung, paired: !!tvTokens()[tv.key], needsPsk: false, mac: tv.mac || null },
             ],
             xbox: { ip: XBOX.ip, reachable: cache.xbox },
         };
@@ -305,7 +414,7 @@ function create({ samsungTv, tvKey, tvTokens }) {
     async function remote(tv, button, samsungPower) {
         if (!BUTTONS.includes(button)) throw new Error('Touche inconnue');
         if (!tv) {
-            if (button === 'power') return sonyPowerToggle();
+            if (button === 'power') { const on = await sonyPowerToggle(); setPending('sony', on); return on; }
             return sonyIrcc(SONY_NAMES[button]);
         }
         if (button === 'power') return samsungPower(tv);
@@ -324,13 +433,24 @@ function create({ samsungTv, tvKey, tvTokens }) {
             } catch (e) {
                 reachable = await probe(SONY.ip, 80, 1500);
             }
-            return { buttons, needsPsk: !k || k === sonyPskRejected, reachable };
+            return { buttons, needsPsk: pskBad(k), reachable };
         }
         const reachable = (await probe(tv.ip, 8002, 1500)) || (await probe(tv.ip, 8001, 1500));
         return { buttons: BUTTONS, needsPsk: false, reachable };
     }
 
-    return { state, bulbCommand, remote, remoteInfo, samsungInfo, refresh, sonyPowerOff };
+    // Sony : allumer/eteindre, volume absolu, volume par pas, sourdine
+    async function sonyPower(on) { const r = await sonySetPower(!!on); setPending('sony', r); return r; }
+    async function sonyVolume(v) { const vol = await sonySetVolume(v); cache.sony.volume = vol; return vol; }
+    async function sonyVolumeSteps(steps) {
+        const n = Math.min(20, Math.abs(Math.round(+steps || 0)));
+        for (let i = 0; i < n; i++) { await sonyIrcc(steps > 0 ? 'VolumeUp' : 'VolumeDown'); await new Promise(r => setTimeout(r, 120)); }
+        if (cache.sony.volume != null && n) cache.sony.volume = Math.max(0, Math.min(100, cache.sony.volume + Math.sign(steps) * n));
+    }
+    const sonyMute = () => sonyIrcc('Mute');
+
+    return { state, bulbCommand, remote, remoteInfo, samsungInfo, refresh, setPending, reprobeSoon,
+        sonyPowerOff, sonyPower, sonyVolume, sonyVolumeSteps, sonyMute };
 }
 
 module.exports = { create, probe, wakeOnLan, SONY, BUTTONS, PSK_HINT };

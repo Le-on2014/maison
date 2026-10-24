@@ -96,29 +96,37 @@ function speakerList() {
 }
 const membersOf = d => d.deviceFamily === 'WHA' ? (d.clusterMembers || []).map(s => alexa.serialNumbers[s]).filter(Boolean) : [d];
 
-async function refreshAlexa() {
-    if (!alexa) return;
+// Rafraichissement leger (CPU ARM lent) : toutes les 8 s, volumes (1 appel) + lecteur des seuls Echos qui jouent
+// quelque chose ou sur lesquels on a agi depuis 2 min ; balayage complet toutes les 60 s. Jamais deux en parallele.
+const ACTED_MS = 120000, FULL_SWEEP_MS = 60000, PLAYER_CONCURRENCY = 3;
+const actedAt = {};          // serial -> derniere action depuis le dashboard
+let alexaRefreshing = false, lastFullSweep = 0;
+const touchAlexa = serial => { if (serial) actedAt[serial] = Date.now(); };
+
+async function refreshAlexa(full) {
+    if (!alexa || alexaRefreshing) return;
+    alexaRefreshing = true;
     try {
-        const r = await cb(c => alexa.getAllDeviceVolumes(c));
-        (r.volumes || []).forEach(v => { if (v.speakerVolume != null && target[v.dsn] === undefined && !inFlight[v.dsn] && Date.now() - (lastSet[v.dsn] || 0) > 15000) volumes[v.dsn] = v.speakerVolume; });
-    } catch (e) { /* reseau */ }
-    await Promise.all(speakerList().filter(d => d.online).map(async d => {
         try {
-            const r = await cb(c => alexa.getPlayerInfo(d.serialNumber, c));
-            const p = r && r.playerInfo;
-            players[d.serialNumber] = p && p.infoText && p.infoText.title ? {
-                state: p.state, title: p.infoText.title, artist: p.infoText.subText1 || '', album: p.infoText.subText2 || '',
-                art: p.mainArt && p.mainArt.url, provider: p.provider && p.provider.providerName,
-                progress: p.progress && p.progress.mediaProgress, length: p.progress && p.progress.mediaLength,
-            } : null;
-        } catch (e) { players[d.serialNumber] = null; }
-    }));
+            const r = await cb(c => alexa.getAllDeviceVolumes(c));
+            (r.volumes || []).forEach(v => { if (v.speakerVolume != null && target[v.dsn] === undefined && !inFlight[v.dsn] && Date.now() - (lastSet[v.dsn] || 0) > 15000) volumes[v.dsn] = v.speakerVolume; });
+        } catch (e) { /* reseau */ }
+        const now = Date.now();
+        const sweep = full === true || now - lastFullSweep > FULL_SWEEP_MS;
+        if (sweep) lastFullSweep = now;
+        const list = speakerList().filter(d => d.online && (sweep || players[d.serialNumber] || now - (actedAt[d.serialNumber] || 0) < ACTED_MS));
+        for (let i = 0; i < list.length; i += PLAYER_CONCURRENCY) {
+            await Promise.all(list.slice(i, i + PLAYER_CONCURRENCY).map(d => refreshPlayer(d.serialNumber)));
+        }
+    } catch (e) { console.log('[alexa] rafraichissement :', e.message || e); }
+    finally { alexaRefreshing = false; }
 }
 
-// Relecture d'un seul Echo apres une action (dedoublonnee : un seul minuteur par Echo)
-const playerTimers = {};
+// Relecture d'un seul Echo apres une action (dedoublonnee : un seul minuteur / une seule requete par Echo)
+const playerTimers = {}, playerInFlight = {};
 async function refreshPlayer(serial) {
-    if (!alexa) return;
+    if (!alexa || playerInFlight[serial]) return;
+    playerInFlight[serial] = true;
     try {
         const r = await cb(c => alexa.getPlayerInfo(serial, c));
         const p = r && r.playerInfo;
@@ -127,9 +135,11 @@ async function refreshPlayer(serial) {
             art: p.mainArt && p.mainArt.url, provider: p.provider && p.provider.providerName,
             progress: p.progress && p.progress.mediaProgress, length: p.progress && p.progress.mediaLength,
         } : null;
-    } catch (e) { /* reseau */ }
+    } catch (e) { /* reseau : on garde le dernier etat connu */ }
+    finally { delete playerInFlight[serial]; }
 }
 function refreshPlayerSoon(serial, ms) {
+    touchAlexa(serial);
     clearTimeout(playerTimers[serial]);
     playerTimers[serial] = setTimeout(() => { delete playerTimers[serial]; refreshPlayer(serial); }, ms);
 }
@@ -156,15 +166,18 @@ function alexaState() {
 // Une requete de volume a la fois par Echo, toujours avec la derniere valeur (pas de "yoyo")
 const target = {}, inFlight = {}, lastSet = {};  // lastSet : on ignore les volumes relus chez Amazon 15 s apres un reglage
 function setVolume(serial, v) {
+    if (!alexa) throw new Error('Alexa pas encore connectée');
     const dev = alexa.serialNumbers[serial];
     if (!dev) throw new Error('Alexa inconnue');
+    touchAlexa(serial);
     for (const m of membersOf(dev)) { target[m.serialNumber] = v; volumes[m.serialNumber] = v; lastSet[m.serialNumber] = Date.now(); pump(m.serialNumber); }
 }
 function pump(dsn) {
     if (inFlight[dsn] || target[dsn] === undefined) return;
     const v = target[dsn]; delete target[dsn];
     inFlight[dsn] = true;
-    alexa.sendSequenceCommand(dsn, 'volume', v, () => { inFlight[dsn] = false; pump(dsn); });
+    try { alexa.sendSequenceCommand(dsn, 'volume', v, () => { inFlight[dsn] = false; pump(dsn); }); }
+    catch (e) { inFlight[dsn] = false; }
 }
 
 // ---------- Teles Samsung ----------
@@ -197,27 +210,48 @@ function lanIp() {
     return null;
 }
 
-async function refreshTvPower() {
-    if (!alexa) return;
-    try {
-        const r = await cb(c => alexa.querySmarthomeDevices(TVS.filter(t => t.entity).map(t => t.entity), c));
-        (r.deviceStates || []).forEach(s => {
-            const tv = TVS.find(t => t.entity === s.entity.entityId);
-            const p = (s.capabilityStates || []).map(c => JSON.parse(c)).find(c => c.namespace === 'Alexa.PowerController');
-            // 8 s apres un allumage/extinction, l'etat Alexa peut etre en retard : on garde l'etat demande
-            if (tv && p && Date.now() - (tvSetAt[tv.key] || 0) > 8000) tvPower[tv.key] = p.value === 'ON';
-        });
-    } catch (e) { /* reseau */ }
+// Une seule interrogation Alexa a la fois (plusieurs clients + minuterie partagent la meme promesse)
+let tvPowerPending = null;
+function refreshTvPower() {
+    if (!alexa) return Promise.resolve();
+    if (tvPowerPending) return tvPowerPending;
+    tvPowerPending = (async () => {
+        try {
+            const r = await cb(c => alexa.querySmarthomeDevices(TVS.filter(t => t.entity).map(t => t.entity), c));
+            (r.deviceStates || []).forEach(s => {
+                const tv = TVS.find(t => t.entity === s.entity.entityId);
+                const p = (s.capabilityStates || []).map(c => { try { return JSON.parse(c); } catch (e) { return {}; } }).find(c => c.namespace === 'Alexa.PowerController');
+                // 8 s apres un allumage/extinction, l'etat Alexa peut etre en retard : on garde l'etat demande
+                if (tv && p && Date.now() - (tvSetAt[tv.key] || 0) > 8000) tvPower[tv.key] = p.value === 'ON';
+            });
+        } catch (e) { /* reseau */ }
+        finally { tvPowerPending = null; }
+    })();
+    return tvPowerPending;
+}
+
+// Samsung sans Alexa (Deauville) : etat connu par la sonde locale, touche POWER en veille, Wake-on-LAN si eteinte
+async function samsungLocalPower(tv, on) {
+    let info = null;
+    try { info = await dv.samsungInfo(tv); } catch (e) { /* eteinte ou hors de portee */ }
+    const isOn = !!info && info.PowerState !== 'standby';
+    if (isOn !== on) {
+        if (info) {   // en veille reseau (ou allumee) : KEY_POWER bascule
+            if (on && tv.mac) dvLib.wakeOnLan(tv.mac);   // en plus, sans risque
+            try { await tvKey(tv, 'KEY_POWER'); }
+            catch (e) { if (!(on && tv.mac)) throw e; }     // allumage : le WoL a deja ete envoye
+        } else if (on && tv.mac) dvLib.wakeOnLan(tv.mac);
+        else if (!on) { /* deja eteinte */ }
+        else throw new Error('Télé hors de portée');
+    }
+    tvPower[tv.key] = on; tvSetAt[tv.key] = Date.now();
+    dv.setPending('samsung', on);   // le pastille ne rebascule pas avant que la tele ait suivi (+ sondes a +3 s / +8 s)
+    return on;
 }
 
 async function tvSetPower(tv, on) {
-    if (!tv.entity) {   // tele sans Alexa (Deauville)
-        let isOn = false;
-        try { isOn = (await dv.samsungInfo(tv)).PowerState !== 'standby'; } catch (e) { /* eteinte */ }
-        if (isOn !== on) await samsungPowerToggle(tv);
-        tvPower[tv.key] = on;
-        return;
-    }
+    if (!tv.entity) return samsungLocalPower(tv, on);
+    if (!alexa) throw new Error('Alexa pas encore connectée');
     await cb(c => alexa.executeSmarthomeDeviceAction(tv.entity, { action: on ? 'turnOn' : 'turnOff' }, c));
     tvPower[tv.key] = on; tvSetAt[tv.key] = Date.now();
     clearTimeout(tvPowerTimer); tvPowerTimer = setTimeout(refreshTvPower, 9000);   // confirmation ciblee, dedoublonnee
@@ -237,7 +271,8 @@ async function tvSocket(tv) {
         const ws = new WebSocket(`${base}/api/v2/channels/samsung.remote.control?name=${name}${token}`, { rejectUnauthorized: false });
         const timer = setTimeout(() => { ws.terminate(); reject(new Error('La tele ne repond pas. Si elle affiche "Autoriser ?", accepte avec la telecommande puis reessaie.')); }, 35000);
         ws.on('message', raw => {
-            const m = JSON.parse(raw);
+            let m = {};
+            try { m = JSON.parse(raw); } catch (e) { return; }
             if (m.event === 'ms.channel.connect') {
                 clearTimeout(timer);
                 if (m.data && m.data.token) { tvTokens[tv.key] = m.data.token; saveTvTokens(); }
@@ -291,9 +326,8 @@ async function samsungPowerToggle(tv) {
     if (tv.entity) return tvSetPower(tv, !tvPower[tv.key]);
     let info = null;
     try { info = await dv.samsungInfo(tv); } catch (e) { /* eteinte ou hors de portee */ }
-    if (info) return tvKey(tv, 'KEY_POWER');
-    if (tv.mac) return dvLib.wakeOnLan(tv.mac);
-    throw new Error('Télé hors de portée');
+    const isOn = !!info && info.PowerState !== 'standby';
+    return samsungLocalPower(tv, !isOn);
 }
 
 function tvState() {
@@ -332,7 +366,7 @@ function schedulePush() {
         pushTimer = null;
         try {
             const msg = `data: ${JSON.stringify({ hue: await hueState() })}\n\n`;
-            clients.forEach(c => c.write(msg));
+            clients.forEach(c => { try { c.write(msg); } catch (e) { clients.delete(c); } });
         } catch (e) { /* pont injoignable */ }
     }, 300);
 }
@@ -342,19 +376,24 @@ function listenHue() {
         host: cfg.BridgeIP, path: '/eventstream/clip/v2', agent: new https.Agent({ rejectUnauthorized: false }),
         headers: { 'hue-application-key': cfg.Username, Accept: 'text/event-stream' },
     }, res => {
+        let again = false;
+        const reconnect = ms => { if (again) return; again = true; setTimeout(listenHue, ms); };
         res.on('data', chunk => { if (String(chunk).includes('"type":"update"')) schedulePush(); });
-        res.on('end', () => setTimeout(listenHue, 3000));
+        res.on('end', () => reconnect(3000));
+        res.on('error', () => reconnect(10000));
+        res.on('aborted', () => reconnect(3000));
     });
     req.on('error', () => setTimeout(listenHue, 10000));
     req.end();
 }
 
 // ---------- HTTP ----------
-function readBody(req) {
+function readBody(req, limit = 64 * 1024) {
     return new Promise(resolve => {
         let b = '';
-        req.on('data', c => b += c);
+        req.on('data', c => { b += c; if (b.length > limit) { b = ''; req.destroy(); } });
         req.on('end', () => { try { resolve(b ? JSON.parse(b) : {}); } catch (e) { resolve({}); } });
+        req.on('error', () => resolve({}));
     });
 }
 
@@ -392,16 +431,21 @@ const routes = {
     },
     'POST /api/alexa/music': async b => {
         await cb(c => alexa.sendSequenceCommand(b.serial, 'textCommand', `joue ${b.search}`, c));
-        setTimeout(refreshAlexa, 4000);
+        refreshPlayerSoon(b.serial, 4000);
         return {};
     },
-    'POST /api/alexa/speak': async b => { await cb(c => alexa.sendSequenceCommand(b.serial, 'speak', String(b.text || ''), c)); return {}; },
-    'POST /api/alexa/cmd': async b => { await cb(c => alexa.sendSequenceCommand(b.serial, 'textCommand', String(b.text || ''), c)); return {}; },
+    'POST /api/alexa/speak': async b => { touchAlexa(b.serial); await cb(c => alexa.sendSequenceCommand(b.serial, 'speak', String(b.text || ''), c)); return {}; },
+    'POST /api/alexa/cmd': async b => { await cb(c => alexa.sendSequenceCommand(b.serial, 'textCommand', String(b.text || ''), c)); refreshPlayerSoon(b.serial, 4000); return {}; },
     'GET /api/tv': async () => { await refreshTvPower(); return tvState(); },
-    'POST /api/tv/power': async b => { await tvSetPower(tvByKey(b.key), !!b.on); return {}; },
+    'POST /api/tv/power': async b => { if (b.key === 'sony') { await dv.sonyPower(!!b.on); return {}; } await tvSetPower(tvByKey(b.key), !!b.on); return {}; },
     'POST /api/tv/speak': async b => { await cb(c => alexa.sendSequenceCommand(tvByKey(b.key).serial, 'speak', String(b.text || ''), c)); return {}; },
-    'POST /api/tv/volume': async b => { await tvVolumeSteps(tvByKey(b.key), +b.steps || 0); return {}; },
-    'POST /api/tv/mute': async b => { await tvKey(tvByKey(b.key), 'KEY_MUTE'); return {}; },
+    'POST /api/tv/volume': async b => { if (b.key === 'sony') { await dv.sonyVolumeSteps(+b.steps || 0); return {}; } await tvVolumeSteps(tvByKey(b.key), +b.steps || 0); return {}; },
+    // Volume absolu (Sony uniquement : API /sony/audio ; les Samsung n'ont que les touches +/-)
+    'POST /api/tv/volume-set': async b => {
+        if (b.key !== 'sony') { const e = new Error('Volume absolu : télé Sony uniquement'); e.status = 400; throw e; }
+        return { volume: await dv.sonyVolume(b.volume) };
+    },
+    'POST /api/tv/mute': async b => { if (b.key === 'sony') { await dv.sonyMute(); return {}; } await tvKey(tvByKey(b.key), 'KEY_MUTE'); return {}; },
     'POST /api/tv/text': async b => {
         const tv = tvByKey(b.key);
         if (tvPower[tv.key] === false) { await tvSetPower(tv, true); await new Promise(r => setTimeout(r, 6000)); }
@@ -409,13 +453,22 @@ const routes = {
         return {};
     },
     'POST /api/tv/clear': async b => { currentMessage = { text: '', color: '#fff', at: Date.now() }; await tvKey(tvByKey(b.key), 'KEY_EXIT'); return {}; },
-    'POST /api/alexa/stop': async b => { await cb(c => alexa.sendSequenceCommand(b.serial, 'deviceStop', null, c)); return {}; },
+    'POST /api/alexa/stop': async b => { await cb(c => alexa.sendSequenceCommand(b.serial, 'deviceStop', null, c)); refreshPlayerSoon(b.serial, 1500); return {}; },
 };
 // Ambiances + meteo
 const extras = require('./extras').create({
     hue, alexa: () => alexa, setVolume, bulbCommand: b => dv.bulbCommand(b), log: m => console.log(m),
 });
 Object.assign(routes, extras.routes);
+// Xbox : apres allumage/extinction, nouvelles sondes a +3 s et +8 s pour que /api/deauville suive vite
+const xboxRoute = routes['POST /api/xbox'];
+routes['POST /api/xbox'] = async b => {
+    const r = await xboxRoute(b);
+    if (b && (b.action === 'wake' || b.action === 'on' || b.action === 'off')) {
+        if (b.action === 'off') dv.setPending('xbox', false); else dv.reprobeSoon();
+    }
+    return r;
+};
 
 // ---------- Historique + minuteurs ----------
 const alexaBy = device => {
@@ -505,6 +558,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
         res.write(': ok\n\n');
         clients.add(res);
+        res.on('error', () => clients.delete(res));
         return req.on('close', () => clients.delete(res));
     }
     const fn = routes[`${req.method} ${url}`];
@@ -534,13 +588,17 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, config.env.bind, () => console.log(`Dashboard : http://localhost:${PORT} (ecoute ${config.env.bind}, donnees ${config.dataDir}, `
     + (config.env.pin ? 'code PIN actif pour le reseau)' : 'pas de code PIN : acces local seulement)')));
 displayServer.listen(DISPLAY_PORT, '0.0.0.0', () => console.log(`Page d'affichage tele : port ${DISPLAY_PORT}`));
-setInterval(refreshTvPower, 15000);
+// Minuteries : chaque rafraichissement se dedoublonne lui-meme (promesse partagee / drapeau), un appel lent ne s'empile pas
+setInterval(() => { refreshTvPower().catch(() => {}); }, 15000);
 listenHue();
 // Si la connexion Alexa echoue (pas d'Internet au demarrage), on reessaie toutes les 30 s
 function connectAlexa() {
     connect()
-        .then(a => { alexa = a; alexaError = null; console.log('Alexa connectee.'); return refreshAlexa(); })
+        .then(a => { alexa = a; alexaError = null; console.log('Alexa connectee.'); return refreshAlexa(true); })
         .catch(e => { alexaError = e.message || String(e); console.log('Alexa :', alexaError); setTimeout(connectAlexa, 30000); });
 }
 connectAlexa();
-setInterval(refreshAlexa, 8000);
+setInterval(() => { refreshAlexa().catch(() => {}); }, 8000);
+
+// Filet de securite : une promesse oubliee (appareil hors de portee, reponse Amazon inattendue) ne tue pas le serveur
+process.on('unhandledRejection', e => console.log('[serveur] promesse non geree :', (e && e.stack) || e));

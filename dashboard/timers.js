@@ -17,8 +17,12 @@ function create(ctx) {
     const log = ctx.log || (() => {});
     const timers = new Map();   // id -> { id, label, house, target, endsAt, createdAt, handle }
 
-    function save() {
-        try { fs.writeFileSync(file, JSON.stringify([...timers.values()].map(pub), null, 2)); } catch (e) { /* disque */ }
+    function save() {   // ecriture atomique : jamais de fichier a moitie ecrit
+        try {
+            const tmp = `${file}.${process.pid}.tmp`;
+            fs.writeFileSync(tmp, JSON.stringify([...timers.values()].map(pub), null, 2));
+            fs.renameSync(tmp, file);
+        } catch (e) { /* disque */ }
     }
     const pub = t => ({ id: t.id, label: t.label, house: t.house, target: t.target, endsAt: t.endsAt, createdAt: t.createdAt });
 
@@ -67,7 +71,8 @@ function create(ctx) {
 
     function schedule(t) {
         clearTimeout(t.handle);
-        t.handle = setTimeout(() => fire(t.id), Math.max(0, t.endsAt - Date.now()));
+        // setTimeout plafonne a ~24,8 jours ; un minuteur fait 12 h max mais on reste prudent
+        t.handle = setTimeout(() => { fire(t.id).catch(e => log(`Minuteur : ${e.message || e}`)); }, Math.min(2147483647, Math.max(0, t.endsAt - Date.now())));
         timers.set(t.id, t);
     }
 

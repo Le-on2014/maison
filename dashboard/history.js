@@ -9,8 +9,8 @@ function create({ file = path.join(__dirname, 'history.json'), max = 200 } = {})
         if (!Array.isArray(items)) items = [];
     } catch (e) { items = []; }
 
-    function save() {
-        try { fs.writeFileSync(file, JSON.stringify(items)); } catch (e) { /* disque */ }
+    function save() {   // ecriture atomique : jamais de fichier a moitie ecrit (coupure de courant sur l'iHost)
+        try { const tmp = `${file}.${process.pid}.tmp`; fs.writeFileSync(tmp, JSON.stringify(items)); fs.renameSync(tmp, file); } catch (e) { /* disque */ }
     }
 
     // append({ house?, text, source? }) -> entree ajoutee
@@ -75,6 +75,7 @@ function createDescriber(ctx) {
             case 'POST /api/tv/power': return { house: get('tvHouse', b.key), text: onOff(tvName(b.key), !!b.on) };
             case 'POST /api/tv/speak': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} dit ${q(b.text)}` };
             case 'POST /api/tv/volume': { const s = +b.steps || 0; return { house: get('tvHouse', b.key), text: `${tvName(b.key)} : volume ${s > 0 ? '+' : ''}${s}` }; }
+            case 'POST /api/tv/volume-set': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} : volume → ${Math.round(+b.volume)}` };
             case 'POST /api/tv/mute': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} : sourdine` };
             case 'POST /api/tv/text': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} : message ${q(b.text)}` };
             case 'POST /api/tv/clear': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} : message effacé` };

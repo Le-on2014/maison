@@ -124,6 +124,7 @@ function logout(req, res) {
 function handle(req, res) {
     const url = (req.url || '/').split('?')[0];
     if (!url.startsWith('/api/')) return false;             // page, icones, manifeste : toujours servis
+    if (url === '/api/events' && req.method === 'GET') return false;   // flux temps reel (etat Hue en lecture seule)
     if (url === '/api/login-required' && req.method === 'GET') {
         const local = isLocal(req);
         return json(res, 200, { required: !local && !isAuthed(req), pinConfigured: !!config.env.pin, local });

@@ -10,6 +10,9 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
+# Fuseau horaire (TZ=Europe/Paris) : alpine n'embarque pas les zones sans tzdata
+RUN apk add --no-cache tzdata
+
 # Dependances Alexa d'abord (couche mise en cache tant que package*.json ne change pas)
 COPY alexa/package.json alexa/package-lock.json ./alexa/
 RUN cd alexa && npm ci --omit=dev --no-audit --no-fund && npm cache clean --force

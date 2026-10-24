@@ -1,11 +1,12 @@
 # Déployer le dashboard « Maison » sur le Sonoff iHost
 
 Le dashboard (Hue + Alexa + télés) tourne aujourd'hui sur ce PC. Ce guide le fait tourner **en permanence sur l'iHost**
-(`http://192.168.1.91`) dans un conteneur Docker, construit automatiquement par GitHub et publié sur GHCR.
+(`http://192.168.1.91`) dans un conteneur Docker, construit automatiquement par GitHub et publié sur **Docker Hub**.
 
-Principe : le **code** va dans un dépôt GitHub (privé, c'est très bien) → GitHub Actions construit l'image pour
-armv7 (iHost) et la publie dans `ghcr.io/le-on2014/maison:latest` (**l'image doit être publique**, l'iHost ne sait pas
-s'authentifier) → l'iHost tire l'image. **Aucun secret n'est dans l'image** : les clés Hue, le cookie Amazon, les jetons
+Principe : le **code** va dans un dépôt GitHub → GitHub Actions construit l'image pour armv7 (iHost) et la publie dans
+`leonleonbj/maison:latest` sur Docker Hub (publique) → l'iHost la tire depuis son dépôt « Docker hub » intégré.
+L'image est aussi publiée sur GHCR (`ghcr.io/le-on2014/maison`) mais **l'iHost ne sait pas lire GHCR**
+(erreur 190038 « Add-on does not exist », même avec un jeton) : seul Docker Hub marche. **Aucun secret n'est dans l'image** : les clés Hue, le cookie Amazon, les jetons
 des télés arrivent par variables d'environnement saisies dans l'iHost, et sont écrits une fois pour toutes dans le
 volume `/data` au premier démarrage.
 
@@ -28,14 +29,17 @@ volume `/data` au premier démarrage.
    ```
    (La première fois, une fenêtre de connexion GitHub s'ouvre dans le navigateur.)
 
-## 2. Attendre l'Action, puis rendre l'image publique
+## 2. Docker Hub : compte, jeton, secrets GitHub (une seule fois)
 
-1. Sur GitHub → onglet **Actions** → « Build & push image maison » : ~5 à 10 minutes la première fois (émulation ARM).
-2. Quand c'est vert : ta page de profil → **Packages** → `maison` → **Package settings** (à droite) →
-   *Danger Zone* → **Change visibility** → **Public** → confirmer en tapant `maison`.
-   À ne faire qu'une fois. L'image ne contient aucun secret (voir `.dockerignore`), elle peut être publique sans risque.
-3. Conseillé : dans *Package settings* → *Manage Actions access*, laisser le dépôt `maison` en *Write* (c'est le défaut)
-   pour que chaque `git push` mette l'image à jour.
+1. Compte Docker Hub (gratuit) : <https://hub.docker.com/signup> → pseudo `leonleonbj`.
+2. Jeton : hub.docker.com → avatar → *Account settings* → *Personal access tokens* → *Generate new token*,
+   description `github`, permissions **Read & Write** → copier le `dckr_pat_…` (affiché une seule fois).
+3. Dans le dépôt GitHub → *Settings* → *Secrets and variables* → *Actions* → *New repository secret* :
+   - `DOCKERHUB_USERNAME` = `leonleonbj`
+   - `DOCKERHUB_TOKEN` = le jeton `dckr_pat_…`
+4. Relancer l'Action (onglet **Actions** → *Build & push image maison* → *Run workflow*, ou un `git push`).
+   Quand c'est vert, le résumé affiche « Image Docker Hub : docker.io/leonleonbj/maison:latest ».
+   L'image est publique par défaut sur Docker Hub ; elle ne contient aucun secret (voir `.dockerignore`).
 
 ## 3. Préparer les variables d'environnement (sur ce PC)
 
@@ -73,8 +77,9 @@ supprimer le volume (ou le fichier concerné) et redémarrer le conteneur.
 
 ## 4. Créer le conteneur sur l'iHost
 
-1. Navigateur → `http://192.168.1.91` → **Docker** → **Ajouter** (icône +) → *Installer depuis une image / Pull*.
-2. **Image** : `ghcr.io/le-on2014/maison:latest` → Télécharger (l'iHost détecte l'architecture arm/v7 tout seul).
+1. Navigateur → `http://192.168.1.91` → **Docker** → **Add** → **Add Add-on** → dépôt **Docker hub**.
+2. **Nom** : `leonleonbj/maison` → *Add to list* → sur la carte `maison`, **Install** (l'iHost détecte l'architecture
+   arm/v7 tout seul), puis **Run**.
 3. **Créer le conteneur** avec :
    - **Nom** : `maison`
    - **Réseau** : **host** si l'option est proposée (recommandé : les télés voient directement les ports 8090/8091, et
@@ -107,7 +112,9 @@ supprimer le volume (ou le fichier concerné) et redémarrer le conteneur.
   sur l'iHost, Docker → conteneur `maison` → *Mettre à jour l'image* / recréer avec la même image et le même volume.
   Les données (`/data`) sont conservées.
 - **Tester l'image sur un PC avec Docker** (l'image est aussi amd64) :
-  `docker run --rm -p 8090:8090 -p 8091:8091 -v maison-data:/data -e MAISON_PIN=1234 -e HUE_CONFIG='{…}' ghcr.io/le-on2014/maison:latest`
+  `docker run --rm -p 8090:8090 -p 8091:8091 -v maison-data:/data -e MAISON_PIN=1234 -e HUE_CONFIG='{…}' leonleonbj/maison:latest`
+- **Raccourcis du PC** : `powershell -ExecutionPolicy Bypass -File shortcuts-ihost.ps1` fait pointer les raccourcis
+  « Maison » (Bureau, menu Démarrer) vers `http://192.168.1.91:8090`.
 
 ## Dépannage
 

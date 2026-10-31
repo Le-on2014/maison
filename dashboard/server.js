@@ -130,7 +130,13 @@ async function refreshAlexa(full) {
     try {
         try {
             const r = await cb(c => alexa.getAllDeviceVolumes(c));
-            (r.volumes || []).forEach(v => { if (v.speakerVolume != null && target[v.dsn] === undefined && !inFlight[v.dsn] && Date.now() - (lastSet[v.dsn] || 0) > 15000) volumes[v.dsn] = v.speakerVolume; });
+            (r.volumes || []).forEach(v => {
+                if (v.speakerVolume == null || target[v.dsn] !== undefined || inFlight[v.dsn]) return;
+                const age = Date.now() - (lastSet[v.dsn] || 0);
+                if (wanted[v.dsn] !== undefined && age < 45000 && v.speakerVolume !== wanted[v.dsn]) return;   // Amazon en retard : on garde la valeur demandee
+                delete wanted[v.dsn];
+                volumes[v.dsn] = v.speakerVolume; sentVol[v.dsn] = v.speakerVolume;
+            });
         } catch (e) { /* reseau */ }
         const now = Date.now();
         const sweep = full === true || now - lastFullSweep > FULL_SWEEP_MS;
@@ -185,20 +191,30 @@ function alexaState() {
 }
 
 // Une requete de volume a la fois par Echo, toujours avec la derniere valeur (pas de "yoyo")
-const target = {}, inFlight = {}, lastSet = {};  // lastSet : on ignore les volumes relus chez Amazon 15 s apres un reglage
+const target = {}, inFlight = {}, lastSet = {}, sentVol = {}, wanted = {};  // lastSet : on ignore les volumes relus chez Amazon 15 s apres un reglage
 function setVolume(serial, v) {
     if (!alexa) throw new Error('Alexa pas encore connectée');
     const dev = alexa.serialNumbers[serial];
     if (!dev) throw new Error('Alexa inconnue');
     touchAlexa(serial);
-    for (const m of membersOf(dev)) { target[m.serialNumber] = v; volumes[m.serialNumber] = v; lastSet[m.serialNumber] = Date.now(); pump(m.serialNumber); }
+    for (const m of membersOf(dev)) {
+        const dsn = m.serialNumber;
+        volumes[dsn] = v; lastSet[dsn] = Date.now(); wanted[dsn] = v;
+        if (sentVol[dsn] === v && !inFlight[dsn]) continue;   // deja a cette valeur : rien a envoyer
+        target[dsn] = v; pump(dsn);
+    }
 }
+// Une seule commande par Echo a la fois ; pendant qu'elle part, seules la DERNIERE valeur demandee est gardee.
+// Garde-fou : si Amazon ne repond jamais, on debloque au bout de 6 s (sinon le volume de cet Echo restait fige).
 function pump(dsn) {
     if (inFlight[dsn] || target[dsn] === undefined) return;
     const v = target[dsn]; delete target[dsn];
     inFlight[dsn] = true;
-    try { alexa.sendSequenceCommand(dsn, 'volume', v, () => { inFlight[dsn] = false; pump(dsn); }); }
-    catch (e) { inFlight[dsn] = false; }
+    let done = false;
+    const finish = () => { if (done) return; done = true; clearTimeout(guard); inFlight[dsn] = false; sentVol[dsn] = v; pump(dsn); };
+    const guard = setTimeout(finish, 6000);
+    try { alexa.sendSequenceCommand(dsn, 'volume', v, finish); }
+    catch (e) { finish(); }
 }
 
 // ---------- Teles Samsung ----------

@@ -708,7 +708,22 @@ function withTvs(serial) {
   return [serial, ...tvs.filter(t => opts[t.key]).map(t => t.serial)];
 }
 const lastPartout = {};
-const sendVolume = throttle((serial, v) => {
+// Volume : on envoie quand le doigt marque une pause (350 ms) ou au relachement, jamais les valeurs intermediaires
+// (avant : une commande toutes les 150 ms -> l'Echo passait par chaque palier, le son montait et descendait).
+const volTimers = {};
+function sendVolume(serial, v, now) {
+  clearTimeout(volTimers[serial]);
+  if (now) { delete volTimers[serial]; sendVolumeNow(serial, v); return; }
+  volTimers[serial] = setTimeout(() => { delete volTimers[serial]; sendVolumeNow(serial, v); }, 350);
+}
+const lastSentVol = {};
+function sendVolumeNow(serial, v) {
+  const l = lastSentVol[serial];
+  if (l && l.v === v && Date.now() - l.at < 5000) return;   // pause puis relachement sur la meme valeur : une seule commande
+  lastSentVol[serial] = { v, at: Date.now() };
+  sendVolumeRaw(serial, v);
+}
+const sendVolumeRaw = ((serial, v) => {
   api('/api/alexa/volume', { serial, volume: v });
   const extra = withTvs(serial).slice(1);
   if (!extra.length) return;
@@ -716,11 +731,11 @@ const sendVolume = throttle((serial, v) => {
   lastPartout[serial] = v;
   const steps = Math.round((v - prev) / 2);   // 1 cran tele pour 2 points de curseur
   if (steps) tvs.filter(t => extra.includes(t.serial)).forEach(t => api('/api/tv/volume', { key: t.key, steps }));
-}, 150);
-let alexaBusyUntil = 0;   // apres un reglage de volume, on n'ecrase pas les curseurs pendant 4 s
+});
+let alexaBusyUntil = 0;   // apres un reglage de volume, on n'ecrase pas les curseurs pendant 6 s
 function onVolume(el, serial) {
   if (lastPartout[serial] == null) { const d0 = state.alexa.devices.find(x => x.serial === serial); if (d0 && d0.volume != null) lastPartout[serial] = d0.volume; }
-  alexaBusyUntil = Date.now() + 4000; markBusy();
+  alexaBusyUntil = Date.now() + 6000; markBusy();
   const d = state.alexa.devices && state.alexa.devices.find(x => x.serial === serial);
   if (d) d.volume = +el.value;
   showVolume(serial, +el.value);
@@ -800,7 +815,7 @@ function playerCard(d) {
         ${timerBtn({ type: 'alexaStop', device: d.name }, d.name)}
       </div>
       ${d.volume != null ? `<div class="slider"><span>🔊</span>
-        <input type="range" min="0" max="100" value="${d.volume}" data-vol="${d.serial}" oninput="onVolume(this,'${d.serial}')" onchange="sendVolume('${d.serial}',+this.value)">
+        <input type="range" min="0" max="100" value="${d.volume}" data-vol="${d.serial}" oninput="onVolume(this,'${d.serial}')" onchange="alexaBusyUntil = Date.now() + 6000; sendVolume('${d.serial}',+this.value,true)">
         <span class="val">${d.volume}</span></div>` : ''}
       ${timerBar({ type: 'alexaStop', device: d.name })}
     </div>`;
@@ -810,7 +825,7 @@ function volRow(d) {
   return `
     <div class="slider ${d.online ? '' : 'offline'}">
       <span class="n">${esc(d.name)}${d.group ? ' <span class="tag">groupe</span>' : ''}${d.online ? '' : ' <span class="tag">hors ligne</span>'}</span>
-      ${d.volume != null ? `<input type="range" min="0" max="100" value="${d.volume}" data-vol="${d.serial}" oninput="onVolume(this,'${d.serial}')" onchange="sendVolume('${d.serial}',+this.value)">
+      ${d.volume != null ? `<input type="range" min="0" max="100" value="${d.volume}" data-vol="${d.serial}" oninput="onVolume(this,'${d.serial}')" onchange="alexaBusyUntil = Date.now() + 6000; sendVolume('${d.serial}',+this.value,true)">
       <span class="val">${d.volume}</span>` : '<span class="sub">volume non disponible</span>'}
     </div>`;
 }
@@ -866,6 +881,12 @@ function renderTvs() {
           <button onclick="tvClear('${t.key}')">✖ Effacer l'écran</button>
         </div>
         <div class="bar">
+          <button onclick="tvHome('${t.key}')">🏠 Accueil</button>
+          <button onclick="tvHome('${t.key}', 'leon')">&gt;_ Léon</button>
+          <button onclick="tvHome('${t.key}', 'henri')">😎 Henri</button>
+          <button onclick="tvHome('${t.key}', 'parents')">✦ Parents</button>
+        </div>
+        <div class="bar">
           <input type="text" id="say-${t.key}" placeholder="Faire parler la télé…" onkeydown="event.key==='Enter' && tvSpeak('${t.key}')">
           <button onclick="tvSpeak('${t.key}')">🗣 Dire</button>
         </div>
@@ -900,6 +921,7 @@ function tvText(key, alsoSay) {
   api('/api/tv/text', { key, text, color: $('col-' + key).value }).then(() => { toast('Affiché à l\'écran'); loadTvs(); });
   if (alsoSay) api('/api/tv/speak', { key, text });
 }
+function tvHome(key, profile) { toast('Écran d\'accueil sur la télé…'); api('/api/tv/home', { key, profile }).then(() => toast('Écran d\'accueil affiché')); }
 function tvClear(key) { api('/api/tv/clear', { key }).then(() => toast('Écran effacé')); }
 function tvSpeak(key) { const el = $('say-' + key), text = el.value.trim(); if (!text) return; api('/api/tv/speak', { key, text }).then(() => { toast('La télé parle'); el.value = ''; }); }
 

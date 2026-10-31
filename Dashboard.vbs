@@ -1,6 +1,6 @@
 ' Lance le dashboard "Maison" sans console, puis l'ouvre en fenetre d'application.
 Option Explicit
-Dim sh, fso, dir, url, edge, i
+Dim sh, fso, dir, url, edge, i, f
 Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 dir = fso.GetParentFolderName(WScript.ScriptFullName) & "\dashboard"
@@ -12,7 +12,7 @@ End Function
 
 If Not Listening() Then
     ' Accessible depuis le reseau (telephones du Wi-Fi), avec le code de dashboard\pin.txt ; ce PC lui-meme n'a pas de code
-    Dim envp, pin, f
+    Dim envp, pin
     Set envp = sh.Environment("Process")
     envp("MAISON_BIND") = "0.0.0.0"
     If fso.FileExists(dir & "\pin.txt") Then
@@ -31,9 +31,21 @@ If Not Listening() Then
     Next
 End If
 
+' Fenetre : l'application Edge "Maison" installee (vrai logo dans la barre des taches) si elle existe,
+' sinon une fenetre Edge --app (logo Edge). L'identifiant de l'app est dans dashboard\edge-app-id.txt.
+Dim appId, proxy
+appId = ""
+If fso.FileExists(dir & "\edge-app-id.txt") Then
+    Set f = fso.OpenTextFile(dir & "\edge-app-id.txt", 1)
+    appId = Trim(f.ReadLine)
+    f.Close
+End If
 edge = sh.ExpandEnvironmentStrings("%ProgramFiles(x86)%") & "\Microsoft\Edge\Application\msedge.exe"
 If Not fso.FileExists(edge) Then edge = sh.ExpandEnvironmentStrings("%ProgramFiles%") & "\Microsoft\Edge\Application\msedge.exe"
-If fso.FileExists(edge) Then
+proxy = fso.GetParentFolderName(edge) & "\msedge_proxy.exe"
+If appId <> "" And fso.FileExists(proxy) Then
+    sh.Run """" & proxy & """ --profile-directory=Default --app-id=" & appId, 1, False
+ElseIf fso.FileExists(edge) Then
     sh.Run """" & edge & """ --app=" & url, 1, False
 Else
     sh.Run url, 1, False

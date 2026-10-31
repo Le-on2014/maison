@@ -171,6 +171,69 @@ function refreshPlayerSoon(serial, ms) {
     playerTimers[serial] = setTimeout(() => { delete playerTimers[serial]; refreshPlayer(serial); }, ms);
 }
 
+// ---------- Bluetooth des Echos ----------
+// Chaque Echo a sa propre liste d'appareils appaires (adresses differentes d'un Echo a l'autre pour le meme telephone) :
+// pour un groupe, on retrouve l'appareil dans chaque membre par son NOM.
+let btCache = { at: 0, states: [] }, btPending = null;
+function readBluetooth(fresh) {
+    if (!alexa) return Promise.reject(new Error('Alexa pas encore connectée'));
+    if (!fresh && Date.now() - btCache.at < 20000) return Promise.resolve(btCache.states);
+    if (btPending) return btPending;
+    btPending = cb(c => alexa.getBluetooth(false, c))
+        .then(r => { btCache = { at: Date.now(), states: (r && r.bluetoothStates) || [] }; return btCache.states; })
+        .finally(() => { btPending = null; });
+    return btPending;
+}
+const btName = n => String(n || '').trim().toLowerCase();
+async function bluetoothState(fresh) {
+    const states = await readBluetooth(fresh);
+    const bySerial = Object.fromEntries(states.map(s => [s.deviceSerialNumber, s]));
+    const echos = speakerList().filter(d => d.deviceFamily !== 'WHA').map(d => {
+        const st = bySerial[d.serialNumber];
+        return {
+            serial: d.serialNumber, name: d.accountName, online: d.online,
+            house: DEAUVILLE_ECHOS.includes(d.serialNumber) ? 'deauville' : 'paris',
+            paired: ((st && st.pairedDeviceList) || []).map(p => ({ name: p.friendlyName, address: p.address, connected: !!p.connected })),
+        };
+    });
+    const groups = speakerList().filter(d => d.deviceFamily === 'WHA').map(g => {
+        const members = (g.clusterMembers || []).map(sn => echos.find(e => e.serial === sn)).filter(Boolean);
+        const names = {};
+        members.forEach(m => m.paired.forEach(p => { const k = btName(p.name); const e = (names[k] = names[k] || { name: p.name, on: [] }); if (!e.on.includes(m.name)) e.on.push(m.name); }));
+        return { serial: g.serialNumber, name: g.accountName, members: members.map(m => m.name), devices: Object.values(names) };
+    });
+    return { echos, groups };
+}
+// action 'connect' : serial = un Echo (avec address) ou un groupe (avec name) ; 'disconnect' : un Echo ou tout un groupe
+async function bluetoothAction(b) {
+    if (!alexa) throw new Error('Alexa pas encore connectée');
+    const dev = alexa.serialNumbers[b.serial];
+    if (!dev) throw new Error('Alexa inconnue');
+    const { echos } = await bluetoothState(true);
+    const targets = dev.deviceFamily === 'WHA'
+        ? (dev.clusterMembers || []).map(sn => echos.find(e => e.serial === sn)).filter(Boolean)
+        : echos.filter(e => e.serial === dev.serialNumber);
+    const results = [];
+    for (const e of targets) {
+        try {
+            if (b.action === 'disconnect') {
+                if (!e.paired.some(p => p.connected)) { results.push({ echo: e.name, ok: true, skipped: 'rien de connecté' }); continue; }
+                await cb(c => alexa.disconnectBluetooth(e.serial, null, c));
+                results.push({ echo: e.name, ok: true });
+            } else {
+                const p = b.address && dev.deviceFamily !== 'WHA'
+                    ? e.paired.find(x => x.address === b.address)
+                    : e.paired.find(x => btName(x.name) === btName(b.name));
+                if (!p) { results.push({ echo: e.name, ok: false, skipped: `« ${b.name || b.address} » pas appairé à cet Echo` }); continue; }
+                await cb(c => alexa.connectBluetooth(e.serial, p.address, c));
+                results.push({ echo: e.name, ok: true, device: p.name });
+            }
+        } catch (err) { results.push({ echo: e.name, ok: false, error: String(err.message || err) }); }
+    }
+    btCache.at = 0;   // relecture au prochain GET
+    return { results };
+}
+
 function alexaState() {
     if (!alexa) return { ready: false, error: alexaError };
     return {
@@ -500,6 +563,8 @@ const routes = {
     'POST /api/tv/remote': async b => { await dv.remote(b.key === 'sony' ? null : tvByKey(b.key), String(b.button), samsungPowerToggle); return {}; },
     'GET /api/tv/remote-info': async q => dv.remoteInfo(q.key === 'sony' ? null : tvByKey(q.key)),
     'GET /api/alexa': async () => alexaState(),
+    'GET /api/alexa/bluetooth': async q => bluetoothState(q && q.fresh === '1'),
+    'POST /api/alexa/bluetooth': async b => bluetoothAction(b),
     'POST /api/group': async b => { await hue('PUT', `grouped_light/${b.id}`, hueBody(b)); return {}; },
     'POST /api/light': async b => { await hue('PUT', `light/${b.id}`, hueBody(b)); return {}; },
     'POST /api/scene': async b => { await hue('PUT', `scene/${b.id}`, { recall: { action: 'active' } }); return {}; },

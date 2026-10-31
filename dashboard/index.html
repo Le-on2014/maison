@@ -115,6 +115,14 @@
     background-repeat: no-repeat; background-position: right 14px center; }
   .bar input[type=text]::placeholder { color: var(--muted); }
   .bar input[type=text]:focus, .bar select:focus, .tcustom input:focus { outline: none; border-color: var(--accent); }
+  .bt { display: grid; gap: 14px; }
+  .bt .grp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .bt .grp b { min-width: 90px; }
+  .bt select { min-width: 150px; }
+  .bt .echo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .bt .echo .n { width: 110px; flex: none; color: var(--muted); font-size: 13px; }
+  .bt .chip.on { border-color: var(--ok); color: var(--ok); }
+  .bt hr { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
   .mini-vols { display: grid; gap: 8px; margin-top: 8px; }
   .mini-vols .slider { margin-top: 0; }
   .mini-vols .n { width: 120px; flex: none; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -412,6 +420,9 @@
     <label class="opt"><input type="checkbox" id="optGrande" onchange="saveOpts()"> 📺 Grande télé (75")</label>
   </div></div>
   <div class="card"><div class="mini-vols" id="vols"><span class="sub">Connexion à Alexa…</span></div></div>
+
+  <h2>Bluetooth des Alexa <button class="tbtn" style="margin-left:8px" onclick="loadBt(true)" title="Relire" aria-label="Relire le Bluetooth">↻</button></h2>
+  <div class="card" id="btCard"><div id="bt" class="bt"><span class="sub">Chargement…</span></div></div>
 
   <h2>Lancer une musique / faire parler</h2>
   <div class="card">
@@ -771,6 +782,60 @@ function pickShown(devs) {
   const groups = devs.filter(d => d.group);
   return groups.length ? groups : devs;
 }
+// ---------- Bluetooth des Echos : un appareil appaire, ou tout un groupe d'un coup ----------
+let bt = null, btBusy = false;
+async function loadBt(fresh) {
+  if (house !== 'paris') return;
+  const r = await req('/api/alexa/bluetooth' + (fresh ? '?fresh=1' : ''));
+  if (r.ok) { bt = r.data; if (!btBusy) renderBt(); }
+  else if (!bt) setHtml($('bt'), `<span class="sub">Bluetooth indisponible${r.data && r.data.error ? ' : ' + esc(r.data.error) : ''}</span>`);
+}
+function renderBt() {
+  if (!bt) return;
+  const echos = bt.echos.filter(e => e.house === 'paris');
+  const groups = bt.groups.filter(g => g.members.length);
+  const gHtml = groups.map(g => {
+    const opts = g.devices.map(d => `<option value="${esc(d.name)}">${esc(d.name)} (${d.on.length}/${g.members.length} : ${esc(d.on.join(', '))})</option>`).join('');
+    return `<div class="grp"><b>${esc(g.name)}</b>
+      ${opts ? `<select id="btg-${g.serial}" aria-label="Appareil Bluetooth">${opts}</select>
+      <button class="primary" onclick="btGroup('${g.serial}')">Connecter tout le groupe</button>` : '<span class="sub">aucun appareil appairé aux Echos du groupe</span>'}
+      <button onclick="btAct({serial:'${g.serial}',action:'disconnect'}, ${jsArg(g.name)})">Tout déconnecter</button></div>`;
+  }).join('');
+  const eHtml = echos.map(e => '<div class="echo"><span class="n">' + esc(e.name) + '</span>'
+    + (e.paired.length ? e.paired.map(p => btChip(e, p)).join('')
+      : '<span class="sub">rien d’appairé (dire « Alexa, appaire le Bluetooth »)</span>') + '</div>').join('');
+  setHtml($('bt'), (gHtml ? gHtml + '<hr>' : '') + (eHtml || '<span class="sub">Aucune Alexa.</span>'));
+}
+function btChip(e, p) {
+  const body = p.connected ? { serial: e.serial, action: 'disconnect' } : { serial: e.serial, action: 'connect', address: p.address, name: p.name };
+  const title = p.connected ? 'Connecté : toucher pour déconnecter' : 'Toucher pour connecter';
+  return '<span class="chip' + (p.connected ? ' on' : '') + '" title="' + title + '" onclick="btAct(' + esc(JSON.stringify(body)) + ', ' + esc(JSON.stringify(e.name)) + ')">'
+    + (p.connected ? '🔵 ' : '') + esc(p.name) + '</span>';
+}
+function btGroup(serial) {
+  const sel = $('btg-' + serial); if (!sel || !sel.value) return;
+  const g = bt.groups.find(x => x.serial === serial);
+  btAct({ serial, action: 'connect', name: sel.value }, g ? g.name : '');
+}
+async function btAct(body, label) {
+  btBusy = true;
+  toast(body.action === 'disconnect' ? `Bluetooth : déconnexion ${label}…` : `Bluetooth : ${label} → ${body.name || ''}…`);
+  // etat optimiste
+  if (bt) bt.echos.forEach(e => {
+    const inGroup = (bt.groups.find(g => g.serial === body.serial) || { members: [] }).members.includes(e.name);
+    if (e.serial !== body.serial && !inGroup) return;
+    e.paired.forEach(p => { p.connected = body.action === 'connect' && (body.address ? p.address === body.address : p.name.toLowerCase() === String(body.name).toLowerCase()); });
+  });
+  renderBt();
+  const r = await req('/api/alexa/bluetooth', body);
+  btBusy = false;
+  if (r.ok && r.data && r.data.results) {
+    const res = r.data.results, bad = res.filter(x => !x.ok);
+    toast(bad.length ? bad.map(x => `${x.echo} : ${x.skipped || x.error}`).join(' · ') : `Bluetooth ✓ (${res.map(x => x.echo).join(', ')})`);
+  } else toast('Bluetooth : échec');
+  setTimeout(() => loadBt(true), 2500);
+}
+
 function renderAlexa() {
   const a = state.alexa;
   $('dotAlexa').classList.toggle('on', !!a.ready);
@@ -951,7 +1016,7 @@ setInterval(loadAlexa, 5000);
 function resumeAll() {
   if (document.hidden) return;
   connectEvents();
-  if (house === 'paris') { load(); if (!$('tab-tv').hidden) loadTvs(); } else loadDeau();
+  if (house === 'paris') { load(); loadBt(); if (!$('tab-tv').hidden) loadTvs(); } else loadDeau();
   loadAlexa(); loadTimers(); loadAmbiances(); loadWeather();
 }
 document.addEventListener('visibilitychange', resumeAll);
@@ -1475,6 +1540,7 @@ loadTvs(); setInterval(() => { if (house === 'paris' && !$('tab-tv').hidden && !
 setInterval(() => { if (house === 'deauville' && !document.hidden) loadDeau(); }, 3000);
 setHouse(house);
 loadWeather(); setInterval(loadWeather, 15 * 60 * 1000);
+loadBt(); setInterval(() => { if (house === 'paris' && !document.hidden && !btBusy) loadBt(); }, 30000);
 </script>
 </body>
 </html>

@@ -71,6 +71,8 @@ function createDescriber(ctx) {
             case 'POST /api/alexa/music': return { house: get('alexaHouse', b.serial), text: `${alexaName(b.serial)} : joue ${q(b.search)}` };
             case 'POST /api/alexa/speak': return { house: get('alexaHouse', b.serial), text: `${alexaName(b.serial)} dit ${q(b.text)}` };
             case 'POST /api/alexa/cmd': return { house: get('alexaHouse', b.serial), text: `${alexaName(b.serial)} : ${q(b.text)}` };
+            case 'POST /api/alexa/bluetooth': return { house: get('alexaHouse', b.serial), text: b.action === 'disconnect'
+                ? `${alexaName(b.serial)} : Bluetooth déconnecté` : `${alexaName(b.serial)} : Bluetooth → ${q(b.name || b.address)}` };
             case 'POST /api/alexa/stop': return { house: get('alexaHouse', b.serial), text: `${alexaName(b.serial)} : stop` };
             case 'POST /api/tv/power': return { house: get('tvHouse', b.key), text: onOff(tvName(b.key), !!b.on) };
             case 'POST /api/tv/speak': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} dit ${q(b.text)}` };
@@ -78,6 +80,7 @@ function createDescriber(ctx) {
             case 'POST /api/tv/volume-set': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} : volume → ${Math.round(+b.volume)}` };
             case 'POST /api/tv/mute': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} : sourdine` };
             case 'POST /api/tv/text': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} : message ${q(b.text)}` };
+            case 'POST /api/tv/home': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} : écran d'accueil${b.profile ? ` (${b.profile})` : ''}` };
             case 'POST /api/tv/clear': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} : message effacé` };
             case 'POST /api/tv/remote': return { house: get('tvHouse', b.key), text: `${tvName(b.key)} : touche ${b.button}` };
             case 'POST /api/deauville/bulb': {

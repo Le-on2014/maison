@@ -504,7 +504,8 @@ const routes = {
     },
     'POST /api/alexa/speak': async b => { touchAlexa(b.serial); await cb(c => alexa.sendSequenceCommand(b.serial, 'speak', String(b.text || ''), c)); return {}; },
     'POST /api/alexa/cmd': async b => { await cb(c => alexa.sendSequenceCommand(b.serial, 'textCommand', String(b.text || ''), c)); refreshPlayerSoon(b.serial, 4000); return {}; },
-    'GET /api/tv': async () => { await refreshTvPower(); return tvState(); },
+    // Reponse immediate avec le dernier etat connu ; l'interrogation Alexa (lente : plusieurs secondes) tourne en fond
+    'GET /api/tv': async () => { refreshTvPower().catch(() => {}); return tvState(); },
     'POST /api/tv/power': async b => { if (b.key === 'sony') { await dv.sonyPower(!!b.on); return {}; } await tvSetPower(tvByKey(b.key), !!b.on); return {}; },
     'POST /api/tv/speak': async b => { await cb(c => alexa.sendSequenceCommand(tvByKey(b.key).serial, 'speak', String(b.text || ''), c)); return {}; },
     'POST /api/tv/volume': async b => { if (b.key === 'sony') { await dv.sonyVolumeSteps(+b.steps || 0); return {}; } await tvVolumeSteps(tvByKey(b.key), +b.steps || 0); return {}; },

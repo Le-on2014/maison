@@ -21,7 +21,15 @@ if (!cfg) {
 const hueAgent = new https.Agent({ rejectUnauthorized: false, keepAlive: true }); // certificat auto-signe du pont
 
 // ---------- Hue ----------
-function hue(method, p, body) {
+// Le pont n'accepte que quelques connexions HTTPS a la fois : au-dela il repond une page HTML (pas du JSON).
+// -> file d'attente (3 requetes en parallele max) + nouvelle tentative si la reponse n'est pas du JSON.
+const HUE_MAX_PARALLEL = 3;
+let hueRunning = 0; const hueQueue = [];
+function hueSlot() { return new Promise(resolve => { hueQueue.push(resolve); hueNext(); }); }
+function hueNext() { while (hueRunning < HUE_MAX_PARALLEL && hueQueue.length) { hueRunning++; hueQueue.shift()(); } }
+function hueDone() { hueRunning = Math.max(0, hueRunning - 1); hueNext(); }
+
+function hueOnce(method, p, body) {
     return new Promise((resolve, reject) => {
         const data = body ? Buffer.from(JSON.stringify(body)) : null;
         const req = https.request({
@@ -32,11 +40,12 @@ function hue(method, p, body) {
             res.setEncoding('utf8');
             res.on('data', c => buf += c);
             res.on('end', () => {
-                try {
-                    const j = JSON.parse(buf);
-                    if (j.errors && j.errors.length && !j.data.length) return reject(new Error(j.errors[0].description));
-                    resolve(j.data);
-                } catch (e) { reject(e); }
+                let j;
+                try { j = JSON.parse(buf); }
+                catch (e) { const err = new Error(`Pont Hue : reponse ${res.statusCode} non JSON (${p})`); err.retry = true; return reject(err); }
+                if (res.statusCode === 429 || res.statusCode === 503) { const err = new Error(`Pont Hue occupe (${res.statusCode})`); err.retry = true; return reject(err); }
+                if (j.errors && j.errors.length && !(j.data && j.data.length)) return reject(new Error(j.errors[0].description));
+                resolve(j.data || []);
             });
         });
         // Delai court (connexion comprise) : a Deauville le pont de Paris est hors de portee, on ne bloque pas
@@ -46,6 +55,18 @@ function hue(method, p, body) {
         if (data) req.write(data);
         req.end();
     });
+}
+async function hue(method, p, body) {
+    await hueSlot();
+    try {
+        for (let attempt = 0; ; attempt++) {
+            try { return await hueOnce(method, p, body); }
+            catch (e) {
+                if (!e.retry || attempt >= 2) throw e;
+                await new Promise(r => setTimeout(r, 250 * (attempt + 1)));
+            }
+        }
+    } finally { hueDone(); }
 }
 
 const hueNames = {};
@@ -310,13 +331,31 @@ async function tvVolumeSteps(tv, steps) {
     for (let i = 0; i < n; i++) { await tvKey(tv, key); await new Promise(r => setTimeout(r, 120)); }
 }
 
-async function tvShowText(tv, text, color) {
+async function tvOpenPage(tv, page) {
     const ip = lanIp();
     if (!ip) throw new Error('Adresse du PC introuvable sur le reseau');
-    currentMessage = { text, color: color || '#ffffff', at: Date.now() };
-    const url = `http://${ip}:${DISPLAY_PORT}/msg?t=${Date.now()}`;
+    const url = `http://${ip}:${DISPLAY_PORT}${page}${page.includes('?') ? '&' : '?'}t=${Date.now()}`;
     await tvSend(tv, { method: 'ms.channel.emit', params: { event: 'ed.apps.launch', to: 'host', data: { appId: 'org.tizen.browser', action_type: 'NATIVE_LAUNCH', metaTag: url } } });
 }
+
+async function tvShowText(tv, text, color) {
+    currentMessage = { text, color: color || '#ffffff', at: Date.now() };
+    await tvOpenPage(tv, '/msg');
+}
+
+// Ecran d'accueil par profil (Leon / Henri / Parents), voir tvhome.js
+const tvHomeLib = require('./tvhome');
+const tvHome = tvHomeLib.create({
+    hueState: () => hueState(), weather: () => extras.routes['GET /api/weather'](),
+    // Seule une tele connue peut lancer une appli, et seulement sur elle-meme. API REST de la tele :
+    // sur la QN90C (Tizen 2023), ed.apps.launch par le websocket est ignore, le POST fonctionne.
+    openApp: async (ip, appId) => {
+        const tv = TVS.find(t => t.ip === ip);
+        if (!tv) throw new Error('Pas une télé de la maison');
+        const r = await fetch(`http://${tv.ip}:8001/api/v2/applications/${appId}`, { method: 'POST', signal: AbortSignal.timeout(6000) });
+        if (!r.ok) throw new Error(`Lancement refusé par la télé (HTTP ${r.status})`);
+    },
+});
 
 // ---------- Deauville + telecommande ----------
 const dv = dvLib.create({ samsungTv: () => tvByKey('samsung43'), tvKey: (tv, k) => tvKey(tv, k), tvTokens: () => tvTokens });
@@ -354,6 +393,27 @@ const displayServer = http.createServer((req, res) => {
     const url = req.url.split('?')[0];
     if (url === '/msg') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(MSG_PAGE); }
     if (url === '/msg.json') { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); return res.end(JSON.stringify(currentMessage)); }
+    if (url === '/accueil') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(tvHome.page); }
+    const avatar = /^\/accueil\/avatar\/([a-z0-9-]+\.png)$/.exec(url);
+    if (avatar) {
+        try {
+            const data = fs.readFileSync(path.join(__dirname, 'avatars', avatar[1]));
+            res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'max-age=86400' });
+            return res.end(data);
+        } catch (e) { res.writeHead(404); return res.end(); }
+    }
+    if (url === '/accueil.json') {
+        return tvHome.json().then(j => {
+            res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+            res.end(JSON.stringify(j));
+        }, () => { res.writeHead(500); res.end(); });
+    }
+    if (req.method === 'POST' && url === '/accueil/lancer') {
+        const app = new URL(req.url, 'http://localhost').searchParams.get('app');
+        const ip = String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+        return Promise.resolve().then(() => tvHome.launch(app, ip)).then(() => { res.writeHead(204); res.end(); },
+            e => { console.log('[accueil]', e.message); res.writeHead(403); res.end(); });
+    }
     res.writeHead(404); res.end();
 });
 
@@ -409,7 +469,7 @@ function hueBody(b) {
 const routes = {
     'GET /api/state': async () => {
         try { return { hue: await hueState(), alexa: alexaState() }; }
-        catch (e) { return { hue: [], hueError: 'hors de portée', alexa: alexaState() }; }
+        catch (e) { console.log(`[hue] ${e.message}`); return { hue: [], hueError: 'hors de portée', alexa: alexaState() }; }
     },
     'GET /api/deauville': async () => dv.state(),
     // Cle PSK de la Sony (Deauville) modifiable depuis le reseau, sans recreer le conteneur
@@ -458,6 +518,16 @@ const routes = {
         const tv = tvByKey(b.key);
         if (tvPower[tv.key] === false) { await tvSetPower(tv, true); await new Promise(r => setTimeout(r, 6000)); }
         await tvShowText(tv, String(b.text || ''), b.color);
+        return {};
+    },
+    'POST /api/tv/home': async b => {
+        const tv = tvByKey(b.key);
+        const profile = tvHomeLib.PROFILES[b.profile] ? b.profile : null;
+        if (tvPower[tv.key] === false) { await tvSetPower(tv, true); await new Promise(r => setTimeout(r, 6000)); }
+        await tvOpenPage(tv, profile ? `/accueil?p=${profile}` : '/accueil');
+        // QN90C (Tizen 2023) : l'ouverture d'une URL par le websocket est ignoree ; on ouvre le navigateur par
+        // l'API REST, il affiche sa page d'accueil (a regler une fois sur http://<IP du serveur>:8091/accueil)
+        await fetch(`http://${tv.ip}:8001/api/v2/applications/org.tizen.browser`, { method: 'POST', signal: AbortSignal.timeout(6000) }).catch(() => {});
         return {};
     },
     'POST /api/tv/clear': async b => { currentMessage = { text: '', color: '#fff', at: Date.now() }; await tvKey(tvByKey(b.key), 'KEY_EXIT'); return {}; },

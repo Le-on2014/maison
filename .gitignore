@@ -26,3 +26,10 @@ Deauville/
 Thumbs.db
 desktop.ini
 .vscode/
+# Appli tele generee (contient la cle Hue) et photos des profils
+tv-app/src/
+**/*.wgt
+dashboard/avatars/
+
+# Code d'acces du dashboard sur ce PC
+**/pin.txt

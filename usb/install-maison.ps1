@@ -8,7 +8,8 @@
 param(
     [string]$Pin = '',
     [switch]$NoSleepChange,     # ne touche pas aux reglages de veille
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [switch]$Quiet              # sans pause a la fin ni fenetre d'elevation (installation a distance / par SSH)
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -17,6 +18,7 @@ $taskName = 'Maison'
 
 # ---- elevation (une seule fois) ----
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin -and $Quiet) { Write-Host "ERREUR : lancer ce script en administrateur (PowerShell 'Executer en tant qu'administrateur', ou session SSH d'un compte administrateur)."; exit 1 }
 if (-not $isAdmin) {
     $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$($MyInvocation.MyCommand.Path)`"")
     if ($Pin) { $args += @('-Pin', $Pin) }
@@ -38,7 +40,7 @@ if ($Uninstall) {
     Get-NetFirewallRule -DisplayName 'Maison*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
     Say "Tache, pare-feu et dossier $dest supprimes."
-    Write-Host ""; Read-Host "Termine. Appuie sur Entree"
+    Write-Host ""; if (-not $Quiet) { Read-Host "Termine. Appuie sur Entree" }
     exit
 }
 
@@ -138,4 +140,5 @@ if ($ok) {
     if (Test-Path $log) { Get-Content $log -Tail 20 }
 }
 Write-Host ""
-Read-Host "Appuie sur Entree pour fermer"
+if (-not $Quiet) { Read-Host "Appuie sur Entree pour fermer" }
+if (-not $ok) { exit 1 }
